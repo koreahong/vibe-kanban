@@ -1,7 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@vibe/ui/components/Button';
 import { Input } from '@vibe/ui/components/Input';
-import { jiraApi, type JiraConfig } from '@/shared/lib/api';
+import type { JiraConfig } from '@/shared/lib/api';
+
+// Direct fetch to remote server (bypasses relay transport which requires host context)
+const JIRA_API_BASE = '';
+
+async function jiraApiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  return fetch(`${JIRA_API_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+}
 
 export function JiraSettingsSectionContent() {
   const [config, setConfig] = useState<JiraConfig>({
@@ -17,8 +30,8 @@ export function JiraSettingsSectionContent() {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    jiraApi
-      .getConfig()
+    jiraApiFetch('/api/jira/config')
+      .then((res) => (res.ok ? res.json() : null))
       .then((cfg) => {
         if (cfg) setConfig(cfg);
       })
@@ -30,7 +43,14 @@ export function JiraSettingsSectionContent() {
     setSaving(true);
     setMessage(null);
     try {
-      await jiraApi.updateConfig(config);
+      const res = await jiraApiFetch('/api/jira/config', {
+        method: 'PUT',
+        body: JSON.stringify(config),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err || `HTTP ${res.status}`);
+      }
       setMessage('Configuration saved successfully.');
     } catch (e) {
       setMessage(
