@@ -11,11 +11,9 @@ import {
   PlusIcon,
   KanbanIcon,
   SpinnerIcon,
-  StarIcon,
 } from '@phosphor-icons/react';
 import { cn } from '../lib/cn';
 import { AppBarButton } from './AppBarButton';
-import { AppBarSocialLink } from './AppBarSocialLink';
 import {
   Popover,
   PopoverTrigger,
@@ -30,12 +28,6 @@ import {
 } from './Dropdown';
 import { Tooltip } from './Tooltip';
 import { useTranslation } from 'react-i18next';
-
-function formatStarCount(count: number): string {
-  if (count < 1000) return String(count);
-  const k = count / 1000;
-  return k >= 10 ? `${Math.floor(k)}k` : `${k.toFixed(1)}k`;
-}
 
 function getProjectInitials(name: string): string {
   const trimmed = name.trim();
@@ -78,8 +70,8 @@ interface AppBarProps {
   appVersion?: string | null;
   updateVersion?: string | null;
   onUpdateClick?: () => void;
-  githubIconPath: string;
-  discordIconPath: string;
+  githubIconPath?: string;
+  discordIconPath?: string;
 }
 
 export interface AppBarProject {
@@ -133,13 +125,9 @@ export function AppBar({
   onHoverEnd,
   notificationBell,
   userPopover,
-  starCount,
-  onlineCount,
   appVersion,
   updateVersion,
   onUpdateClick,
-  githubIconPath,
-  discordIconPath,
 }: AppBarProps) {
   const { t } = useTranslation('common');
   const showHostsSection =
