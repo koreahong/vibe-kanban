@@ -10,7 +10,7 @@ import { Button } from '@vibe/ui/components/Button';
 import { Input } from '@vibe/ui/components/Input';
 import { Badge } from '@vibe/ui/components/Badge';
 import { create, useModal } from '@ebay/nice-modal-react';
-import { Search, Download, Loader2, ExternalLink } from 'lucide-react';
+import { Search, Download, Loader2 } from 'lucide-react';
 import { defineModal } from '@/shared/lib/modals';
 import {
   jiraApi,

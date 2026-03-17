@@ -871,7 +871,7 @@ export function KanbanIssuePanelContainer({
     if (!selectedIssue) return null;
     const jiraKeyPattern = /^[A-Z]+-\d+$/;
     // Check extension_metadata first
-    const metaKey = selectedIssue.extension_metadata?.jira_key;
+    const metaKey = (selectedIssue.extension_metadata as Record<string, unknown> | undefined)?.jira_key;
     if (typeof metaKey === 'string' && jiraKeyPattern.test(metaKey)) return metaKey;
     // Fall back to simple_id
     if (jiraKeyPattern.test(selectedIssue.simple_id)) return selectedIssue.simple_id;
