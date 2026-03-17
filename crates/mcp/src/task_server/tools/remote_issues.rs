@@ -1,8 +1,8 @@
 use api_types::{
-    CreateIssueRequest, Issue, IssuePriority, IssueRelationshipType, ListIssueAssigneesResponse,
-    ListIssueRelationshipsResponse, ListIssueTagsResponse, ListIssuesResponse,
-    ListPullRequestsResponse, ListTagsResponse, MutationResponse, PullRequestStatus,
-    UpdateIssueRequest,
+    CreateIssueRequest, Issue, IssuePriority, IssueRelationshipType,
+    ListIssueAssigneesResponse, ListIssueRelationshipsResponse, ListIssueTagsResponse,
+    ListIssuesResponse, ListPullRequestsResponse, ListTagsResponse, MutationResponse,
+    PullRequestStatus, UpdateIssueRequest,
 };
 use rmcp::{
     ErrorData, handler::server::tool::Parameters, model::CallToolResult, schemars, tool,
@@ -24,7 +24,7 @@ struct McpCreateIssueRequest {
     #[schemars(description = "Optional description of the issue")]
     description: Option<String>,
     #[schemars(
-        description = "Optional priority of the issue. Allowed values: 'urgent', 'high', 'medium', 'low'."
+        description = "Optional priority of the issue. Allowed values: 'urgent', 'high', 'medium', 'low', 'lowest'."
     )]
     priority: Option<String>,
     #[schemars(description = "Optional parent issue ID to create a subissue")]
@@ -49,7 +49,7 @@ struct McpListIssuesRequest {
     #[schemars(description = "Filter by status name (case-insensitive)")]
     status: Option<String>,
     #[schemars(
-        description = "Filter by priority. Allowed values: 'urgent', 'high', 'medium', 'low'."
+        description = "Filter by priority. Allowed values: 'urgent', 'high', 'medium', 'low', 'lowest'."
     )]
     priority: Option<String>,
     #[schemars(description = "Filter by parent issue ID (subissues of this issue)")]
@@ -201,7 +201,7 @@ struct McpUpdateIssueRequest {
     #[schemars(description = "New status name for the issue (must match a project status name)")]
     status: Option<String>,
     #[schemars(
-        description = "New priority for the issue. Allowed values: 'urgent', 'high', 'medium', 'low'."
+        description = "New priority for the issue. Allowed values: 'urgent', 'high', 'medium', 'low', 'lowest'."
     )]
     priority: Option<String>,
     #[schemars(
@@ -287,6 +287,8 @@ impl McpServer {
             title,
             description: expanded_description,
             priority,
+            simple_id: None,
+            issue_number: None,
             start_date: None,
             target_date: None,
             completed_at: None,
@@ -568,7 +570,7 @@ impl McpServer {
     #[tool(description = "List allowed issue priority values.")]
     async fn list_issue_priorities(&self) -> Result<CallToolResult, ErrorData> {
         McpServer::success(&McpListIssuePrioritiesResponse {
-            priorities: ["urgent", "high", "medium", "low"]
+            priorities: ["urgent", "high", "medium", "low", "lowest"]
                 .iter()
                 .map(|s| s.to_string())
                 .collect(),
@@ -816,15 +818,16 @@ impl McpServer {
             .collect()
     }
 
-    fn parse_issue_priority(priority: &str) -> Result<IssuePriority, CallToolResult> {
+    pub(crate) fn parse_issue_priority(priority: &str) -> Result<IssuePriority, CallToolResult> {
         match priority.trim().to_ascii_lowercase().as_str() {
             "urgent" => Ok(IssuePriority::Urgent),
             "high" => Ok(IssuePriority::High),
             "medium" => Ok(IssuePriority::Medium),
             "low" => Ok(IssuePriority::Low),
+            "lowest" => Ok(IssuePriority::Lowest),
             _ => Err(Self::err(
                 format!(
-                    "Unknown priority '{}'. Allowed values: ['urgent', 'high', 'medium', 'low']",
+                    "Unknown priority '{}'. Allowed values: ['urgent', 'high', 'medium', 'low', 'lowest']",
                     priority
                 ),
                 None::<String>,
@@ -839,6 +842,7 @@ impl McpServer {
             IssuePriority::High => "high",
             IssuePriority::Medium => "medium",
             IssuePriority::Low => "low",
+            IssuePriority::Lowest => "lowest",
         }
     }
 

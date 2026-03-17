@@ -8,6 +8,7 @@ import { RemoteProjectsSettingsSectionContent } from './RemoteProjectsSettingsSe
 import { AgentsSettingsSectionContent } from './AgentsSettingsSection';
 import { McpSettingsSectionContent } from './McpSettingsSection';
 import { RelaySettingsSectionContent } from './RelaySettingsSection';
+import { JiraSettingsSectionContent } from './JiraSettingsSection';
 
 export type SettingsSectionType =
   | 'general'
@@ -16,7 +17,8 @@ export type SettingsSectionType =
   | 'remote-projects'
   | 'agents'
   | 'mcp'
-  | 'relay';
+  | 'relay'
+  | 'jira';
 
 // Section-specific initial state types
 export type SettingsSectionInitialState = {
@@ -29,6 +31,7 @@ export type SettingsSectionInitialState = {
   agents: { executor?: string; variant?: string } | undefined;
   mcp: undefined;
   relay: { hostId?: string } | undefined;
+  jira: undefined;
 };
 
 interface SettingsSectionProps {
@@ -74,6 +77,8 @@ export function SettingsSection({
             initialState={initialState as SettingsSectionInitialState['relay']}
           />
         );
+      case 'jira':
+        return <JiraSettingsSectionContent />;
       default:
         return <GeneralSettingsSectionContent />;
     }

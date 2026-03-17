@@ -73,8 +73,21 @@ impl Server {
             )?);
         }
 
-        if registry.is_empty() {
+        if let Some(keycloak) = auth_config.keycloak() {
+            registry.register(crate::auth::KeycloakOAuthProvider::new(
+                keycloak.client_id().to_string(),
+                keycloak.client_secret().clone(),
+                keycloak.base_url().to_string(),
+                keycloak.realm().to_string(),
+            )?);
+        }
+
+        if registry.is_empty() && !auth_config.dev_auth() {
             bail!("no OAuth providers configured");
+        }
+
+        if auth_config.dev_auth() {
+            tracing::warn!("Dev auth enabled -- DO NOT use in production");
         }
 
         let registry = Arc::new(registry);

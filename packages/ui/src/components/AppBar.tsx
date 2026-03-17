@@ -22,6 +22,12 @@ import {
   PopoverContent,
   PopoverClose,
 } from './Popover';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from './Dropdown';
 import { Tooltip } from './Tooltip';
 import { useTranslation } from 'react-i18next';
 
@@ -50,6 +56,7 @@ interface AppBarProps {
   onPairHostClick?: () => void;
   activeHostId?: string | null;
   onCreateProject: () => void;
+  onImportEpicAsProject?: () => void;
   onWorkspacesClick: () => void;
   onHostClick?: (hostId: string, status: AppBarHostStatus) => void;
   showWorkspacesButton?: boolean;
@@ -109,6 +116,7 @@ export function AppBar({
   onPairHostClick,
   activeHostId = null,
   onCreateProject,
+  onImportEpicAsProject,
   onWorkspacesClick,
   onHostClick,
   showWorkspacesButton = true,
@@ -365,23 +373,52 @@ export function AppBar({
         </Droppable>
       </DragDropContext>
 
-      {/* Create project button */}
+      {/* Create project button / dropdown */}
       {isSignedIn && (
-        <Tooltip content="Create project" side="right">
-          <button
-            type="button"
-            onClick={onCreateProject}
-            className={cn(
-              'flex items-center justify-center w-10 h-10 rounded-lg',
-              'text-sm font-medium transition-colors cursor-pointer',
-              'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand',
-              'bg-primary text-muted hover:text-normal hover:bg-tertiary'
-            )}
-            aria-label="Create project"
-          >
-            <PlusIcon size={20} />
-          </button>
-        </Tooltip>
+        onImportEpicAsProject ? (
+          <DropdownMenu>
+            <Tooltip content="Add project" side="right">
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    'flex items-center justify-center w-10 h-10 rounded-lg',
+                    'text-sm font-medium transition-colors cursor-pointer',
+                    'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+                    'bg-primary text-muted hover:text-normal hover:bg-tertiary'
+                  )}
+                  aria-label="Add project"
+                >
+                  <PlusIcon size={20} />
+                </button>
+              </DropdownMenuTrigger>
+            </Tooltip>
+            <DropdownMenuContent side="right" align="start">
+              <DropdownMenuItem onClick={onCreateProject}>
+                New project
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onImportEpicAsProject}>
+                Import from Jira Epic
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Tooltip content="Create project" side="right">
+            <button
+              type="button"
+              onClick={onCreateProject}
+              className={cn(
+                'flex items-center justify-center w-10 h-10 rounded-lg',
+                'text-sm font-medium transition-colors cursor-pointer',
+                'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+                'bg-primary text-muted hover:text-normal hover:bg-tertiary'
+              )}
+              aria-label="Create project"
+            >
+              <PlusIcon size={20} />
+            </button>
+          </Tooltip>
+        )
       )}
 
       {/* Bottom section: Notifications + User popover + GitHub + Discord */}

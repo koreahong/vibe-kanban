@@ -55,6 +55,7 @@ import { ViewNavTabs } from '@vibe/ui/components/ViewNavTabs';
 import { IssueListView } from '@vibe/ui/components/IssueListView';
 import { CommandBarDialog } from '@/shared/dialogs/command-bar/CommandBarDialog';
 import { KanbanFiltersDialog } from '@/shared/dialogs/kanban/KanbanFiltersDialog';
+import { JiraImportDialog } from '@/shared/dialogs/kanban/JiraImportDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -722,6 +723,10 @@ export function KanbanContainer() {
     [createAssigneeIds, defaultCreateStatusId, startCreate]
   );
 
+  const handleImportFromJira = useCallback(() => {
+    void JiraImportDialog.show({ projectId });
+  }, [projectId]);
+
   // Inline editing callbacks for kanban cards
   const handleCardPriorityClick = useCallback(
     (issueId: string) => {
@@ -861,6 +866,7 @@ export function KanbanContainer() {
             onShowWorkspacesChange={setShowWorkspaces}
             onClearFilters={clearKanbanFilters}
             onCreateIssue={handleAddTask}
+            onImportFromJira={handleImportFromJira}
             shouldAnimateCreateButton={shouldAnimateCreateButton}
             renderFiltersDialog={(props) => <KanbanFiltersDialog {...props} />}
             isMobile={isMobile}

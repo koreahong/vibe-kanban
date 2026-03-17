@@ -1,4 +1,6 @@
-use api_types::{ListMembersResponse, ListOrganizationsResponse};
+use api_types::{
+    ListMembersResponse, ListOrganizationsResponse, Organization, UpdateOrganizationRequest,
+};
 use rmcp::{
     ErrorData, handler::server::tool::Parameters, model::CallToolResult, schemars, tool,
     tool_router,
@@ -24,6 +26,32 @@ struct OrganizationSummary {
 struct McpListOrganizationsResponse {
     organizations: Vec<OrganizationSummary>,
     count: usize,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct McpUpdateOrganizationRequest {
+    #[schemars(
+        description = "The organization ID to update. Optional if running inside a workspace linked to a remote organization."
+    )]
+    organization_id: Option<Uuid>,
+    #[schemars(description = "New name for the organization")]
+    name: Option<String>,
+    #[schemars(
+        description = "New issue prefix for the organization (e.g., 'MPD'). This affects the simple_id of newly created issues."
+    )]
+    issue_prefix: Option<String>,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+struct McpUpdateOrganizationResponse {
+    #[schemars(description = "The unique identifier of the organization")]
+    id: String,
+    #[schemars(description = "The name of the organization")]
+    name: String,
+    #[schemars(description = "The slug of the organization")]
+    slug: String,
+    #[schemars(description = "The issue prefix of the organization")]
+    issue_prefix: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -128,6 +156,58 @@ impl McpServer {
             organization_id: organization_id.to_string(),
             count: members.len(),
             members,
+        })
+    }
+
+    #[tool(
+        description = "Update an organization's name and/or issue prefix. `organization_id` is optional if running inside a workspace linked to a remote organization. At least one of `name` or `issue_prefix` must be provided."
+    )]
+    async fn update_organization(
+        &self,
+        Parameters(McpUpdateOrganizationRequest {
+            organization_id,
+            name,
+            issue_prefix,
+        }): Parameters<McpUpdateOrganizationRequest>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let organization_id = match self.resolve_organization_id(organization_id) {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        if name.is_none() && issue_prefix.is_none() {
+            return Ok(
+                Self::err("At least one of 'name' or 'issue_prefix' must be provided", None::<&str>)
+                    .unwrap(),
+            );
+        }
+
+        // Fetch current org to get existing name if not updating it
+        let get_url = self.url(&format!("/api/organizations/{}", organization_id));
+        let current: api_types::GetOrganizationResponse =
+            match self.send_json(self.client.get(&get_url)).await {
+                Ok(r) => r,
+                Err(e) => return Ok(e),
+            };
+
+        let update_name = name.unwrap_or(current.organization.name);
+
+        let payload = UpdateOrganizationRequest {
+            name: update_name,
+            issue_prefix,
+        };
+
+        let url = self.url(&format!("/api/organizations/{}", organization_id));
+        let org: Organization = match self.send_json(self.client.patch(&url).json(&payload)).await {
+            Ok(r) => r,
+            Err(e) => return Ok(e),
+        };
+
+        McpServer::success(&McpUpdateOrganizationResponse {
+            id: org.id.to_string(),
+            name: org.name,
+            slug: org.slug,
+            issue_prefix: org.issue_prefix,
         })
     }
 }

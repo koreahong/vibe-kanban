@@ -14,6 +14,7 @@ pub mod filesystem;
 pub mod events;
 pub mod execution_processes;
 pub mod frontend;
+pub mod jira;
 pub mod health;
 pub mod images;
 pub mod migration;
@@ -51,6 +52,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(migration::router())
         .merge(sessions::router(&deployment))
         .merge(terminal::router())
+        .merge(jira::router())
         .nest("/remote", remote::router())
         .nest("/images", images::routes())
         .layer(axum::middleware::from_fn_with_state(

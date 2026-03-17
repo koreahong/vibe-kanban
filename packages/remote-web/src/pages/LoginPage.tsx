@@ -1,17 +1,33 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearch } from "@tanstack/react-router";
-import { initOAuth, type OAuthProvider } from "@remote/shared/lib/api";
+import {
+  initOAuth,
+  devLogin,
+  getProviders,
+  type OAuthProvider,
+  type ProvidersResponse,
+} from "@remote/shared/lib/api";
 import { BrandLogo } from "@remote/shared/components/BrandLogo";
 import {
   generateVerifier,
   generateChallenge,
   storeVerifier,
 } from "@remote/shared/lib/pkce";
+import { storeTokens } from "@remote/shared/lib/auth";
 
 export default function LoginPage() {
   const { next } = useSearch({ from: "/account" });
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState<OAuthProvider | null>(null);
+  const [pending, setPending] = useState<OAuthProvider | "dev" | null>(null);
+  const [providers, setProviders] = useState<ProvidersResponse | null>(null);
+
+  useEffect(() => {
+    getProviders()
+      .then(setProviders)
+      .catch(() => {
+        // Fallback: assume GitHub + Google available
+      });
+  }, []);
 
   const handleLogin = async (provider: OAuthProvider) => {
     setPending(provider);
@@ -38,6 +54,21 @@ export default function LoginPage() {
     }
   };
 
+  const handleDevLogin = async () => {
+    setPending("dev");
+    setError(null);
+
+    try {
+      const response = await devLogin();
+      await storeTokens(response.access_token, response.refresh_token);
+      const destination = next || "/";
+      window.location.assign(destination);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Dev login failed");
+      setPending(null);
+    }
+  };
+
   return (
     <div className="h-screen overflow-auto bg-primary">
       <div className="mx-auto flex min-h-full w-full max-w-md flex-col justify-center px-base py-double">
@@ -56,20 +87,45 @@ export default function LoginPage() {
           )}
 
           <section className="flex flex-col items-center gap-2">
-            <OAuthButton
-              provider="github"
-              label="Continue with GitHub"
-              onClick={() => void handleLogin("github")}
-              disabled={pending !== null}
-              loading={pending === "github"}
-            />
-            <OAuthButton
-              provider="google"
-              label="Continue with Google"
-              onClick={() => void handleLogin("google")}
-              disabled={pending !== null}
-              loading={pending === "google"}
-            />
+            {(!providers || providers.github) && (
+              <OAuthButton
+                provider="github"
+                label="Continue with GitHub"
+                onClick={() => void handleLogin("github")}
+                disabled={pending !== null}
+                loading={pending === "github"}
+              />
+            )}
+            {(!providers || providers.google) && (
+              <OAuthButton
+                provider="google"
+                label="Continue with Google"
+                onClick={() => void handleLogin("google")}
+                disabled={pending !== null}
+                loading={pending === "google"}
+              />
+            )}
+            {providers?.keycloak && (
+              <OAuthButton
+                provider="keycloak"
+                label="Continue with SSO"
+                onClick={() => void handleLogin("keycloak")}
+                disabled={pending !== null}
+                loading={pending === "keycloak"}
+              />
+            )}
+            {providers?.dev && (
+              <button
+                type="button"
+                className="flex h-10 min-w-[280px] items-center justify-center rounded-[4px] border border-[#dadce0] bg-[#e8f5e9] px-3 text-[14px] font-medium text-[#1f1f1f] transition-colors hover:bg-[#c8e6c9] active:bg-[#a5d6a7] disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => void handleDevLogin()}
+                disabled={pending !== null}
+              >
+                {pending === "dev"
+                  ? "Signing in..."
+                  : "Dev Login (No OAuth Required)"}
+              </button>
+            )}
           </section>
 
           <p className="text-center text-sm text-low">

@@ -5,7 +5,14 @@ import type { ListOrganizationsResponse } from "shared/types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
-export type OAuthProvider = "github" | "google";
+export type OAuthProvider = "github" | "google" | "keycloak";
+
+export type ProvidersResponse = {
+  github: boolean;
+  google: boolean;
+  keycloak: boolean;
+  dev: boolean;
+};
 
 type HandoffInitResponse = {
   handoff_id: string;
@@ -36,6 +43,36 @@ type IdentityResponse = {
   username: string | null;
   email: string;
 };
+
+export async function getProviders(): Promise<ProvidersResponse> {
+  const res = await fetch(`${API_BASE}/v1/auth/providers`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch providers (${res.status})`);
+  }
+  return res.json();
+}
+
+type DevLoginResponse = {
+  access_token: string;
+  refresh_token: string;
+  user_id: string;
+  email: string;
+};
+
+export async function devLogin(
+  email?: string,
+  name?: string,
+): Promise<DevLoginResponse> {
+  const res = await fetch(`${API_BASE}/v1/dev/auth`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, name }),
+  });
+  if (!res.ok) {
+    throw new Error(`Dev login failed (${res.status})`);
+  }
+  return res.json();
+}
 
 export async function initOAuth(
   provider: OAuthProvider,

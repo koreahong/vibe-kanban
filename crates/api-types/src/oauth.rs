@@ -71,3 +71,27 @@ pub struct StatusResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub degraded: Option<bool>,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+pub struct DevLoginRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+pub struct DevLoginResponse {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub user_id: Uuid,
+    pub email: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+pub struct ProvidersResponse {
+    pub github: bool,
+    pub google: bool,
+    pub keycloak: bool,
+    pub dev: bool,
+}

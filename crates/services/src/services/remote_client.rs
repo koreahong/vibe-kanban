@@ -6,16 +6,17 @@ use api_types::{
     AcceptInvitationResponse, CreateInvitationRequest, CreateInvitationResponse,
     CreateIssueAssigneeRequest, CreateIssueRelationshipRequest, CreateIssueRequest,
     CreateIssueTagRequest, CreateOrganizationRequest, CreateOrganizationResponse,
-    CreateWorkspaceRequest, DeleteResponse, DeleteWorkspaceRequest, GetInvitationResponse,
-    GetOrganizationResponse, HandoffInitRequest, HandoffInitResponse, HandoffRedeemRequest,
-    HandoffRedeemResponse, Issue, IssueAssignee, IssueRelationship, IssueTag,
-    ListAttachmentsResponse, ListInvitationsResponse, ListIssueAssigneesResponse,
-    ListIssueRelationshipsResponse, ListIssueTagsResponse, ListIssuesResponse, ListMembersResponse,
-    ListOrganizationsResponse, ListProjectStatusesResponse, ListProjectsResponse,
-    ListPullRequestsResponse, ListTagsResponse, MutationResponse, Organization, ProfileResponse,
-    RevokeInvitationRequest, Tag, TokenRefreshRequest, TokenRefreshResponse, UpdateIssueRequest,
-    UpdateMemberRoleRequest, UpdateMemberRoleResponse, UpdateOrganizationRequest,
-    UpdateWorkspaceRequest, UpsertPullRequestRequest, Workspace,
+    CreateWorkspaceRequest, DeleteResponse, DeleteWorkspaceRequest, DevLoginRequest,
+    DevLoginResponse, GetInvitationResponse, GetOrganizationResponse, HandoffInitRequest,
+    HandoffInitResponse, HandoffRedeemRequest, HandoffRedeemResponse, Issue, IssueAssignee,
+    IssueRelationship, IssueTag, ListAttachmentsResponse, ListInvitationsResponse,
+    ListIssueAssigneesResponse, ListIssueRelationshipsResponse, ListIssueTagsResponse,
+    ListIssuesResponse, ListMembersResponse, ListOrganizationsResponse,
+    ListProjectStatusesResponse, ListProjectsResponse, ListPullRequestsResponse, ListTagsResponse,
+    MutationResponse, Organization, ProfileResponse, ProvidersResponse, RevokeInvitationRequest,
+    Tag, TokenRefreshRequest, TokenRefreshResponse, UpdateIssueRequest, UpdateMemberRoleRequest,
+    UpdateMemberRoleResponse, UpdateOrganizationRequest, UpdateWorkspaceRequest,
+    UpsertPullRequestRequest, Workspace,
 };
 use backon::{ExponentialBuilder, Retryable};
 use chrono::Duration as ChronoDuration;
@@ -284,6 +285,19 @@ impl RemoteClient {
         self.post_public("/v1/oauth/web/redeem", Some(request))
             .await
             .map_err(|e| self.map_api_error(e))
+    }
+
+    /// Performs dev-auth login (no OAuth required, server must have VIBEKANBAN_DEV_AUTH=true).
+    pub async fn dev_login(
+        &self,
+        request: &DevLoginRequest,
+    ) -> Result<DevLoginResponse, RemoteClientError> {
+        self.post_public("/v1/dev/auth", Some(request)).await
+    }
+
+    /// Queries which auth providers are available on the remote server.
+    pub async fn get_providers(&self) -> Result<ProvidersResponse, RemoteClientError> {
+        self.get_public("/v1/auth/providers").await
     }
 
     /// Gets an invitation by token (public, no auth required).

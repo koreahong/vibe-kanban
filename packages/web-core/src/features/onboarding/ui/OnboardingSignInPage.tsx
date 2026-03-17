@@ -14,6 +14,8 @@ import { PrimaryButton } from '@vibe/ui/components/PrimaryButton';
 import { getFirstProjectDestination } from '@/shared/lib/firstProjectDestination';
 import { useOrganizationStore } from '@/shared/stores/useOrganizationStore';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
+import { oauthApi } from '@/shared/lib/api';
+import { getRemoteApiUrl } from '@/shared/lib/remoteApi';
 
 type OnboardingDestination =
   | { kind: 'workspaces-create' }
@@ -56,7 +58,15 @@ type SignInCompletionMethod =
   | 'continue_logged_in'
   | 'skip_sign_in'
   | 'oauth_github'
-  | 'oauth_google';
+  | 'oauth_google'
+  | 'dev_login';
+
+interface ProvidersInfo {
+  github: boolean;
+  google: boolean;
+  keycloak: boolean;
+  dev: boolean;
+}
 function resolveTheme(theme: ThemeMode): 'light' | 'dark' {
   if (theme === ThemeMode.SYSTEM) {
     return window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -82,6 +92,8 @@ export function OnboardingSignInPage() {
   const [pendingProvider, setPendingProvider] = useState<OAuthProvider | null>(
     null
   );
+  const [providers, setProviders] = useState<ProvidersInfo | null>(null);
+  const [devLoginPending, setDevLoginPending] = useState(false);
 
   const trackRemoteOnboardingEvent = useCallback(
     (eventName: string, properties: Record<string, unknown> = {}) => {
@@ -100,6 +112,50 @@ export function OnboardingSignInPage() {
       : '/vibe-kanban-logo.svg';
 
   const isLoggedIn = loginStatus?.status === 'loggedin';
+
+  // Fetch available auth providers from the remote server
+  useEffect(() => {
+    const remoteBase = getRemoteApiUrl();
+    if (!remoteBase) return;
+    fetch(`${remoteBase}/v1/auth/providers`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: ProvidersInfo | null) => {
+        if (data) setProviders(data);
+      })
+      .catch(() => {
+        // Ignore — providers endpoint may not exist on older servers
+      });
+  }, []);
+
+  const handleDevLogin = async () => {
+    if (saving || devLoginPending) return;
+    setDevLoginPending(true);
+
+    trackRemoteOnboardingEvent(REMOTE_ONBOARDING_EVENTS.PROVIDER_CLICKED, {
+      stage: 'sign_in',
+      provider: 'dev',
+    });
+
+    try {
+      await oauthApi.devLogin();
+
+      trackRemoteOnboardingEvent(REMOTE_ONBOARDING_EVENTS.PROVIDER_RESULT, {
+        stage: 'sign_in',
+        provider: 'dev',
+        result: 'success',
+      });
+
+      await finishOnboarding({ method: 'dev_login' });
+    } catch (e) {
+      trackRemoteOnboardingEvent(REMOTE_ONBOARDING_EVENTS.PROVIDER_RESULT, {
+        stage: 'sign_in',
+        provider: 'dev',
+        result: 'error',
+      });
+    } finally {
+      setDevLoginPending(false);
+    }
+  };
 
   useEffect(() => {
     if (loading || !config || hasTrackedStageViewRef.current) return;
@@ -268,20 +324,36 @@ export function OnboardingSignInPage() {
           ) : (
             <>
               <section className="flex flex-col items-center gap-2">
-                <OAuthSignInButton
-                  provider="github"
-                  onClick={() => void handleProviderSignIn('github')}
-                  disabled={saving || pendingProvider !== null}
-                  loading={pendingProvider === 'github'}
-                  loadingText="Opening GitHub..."
-                />
-                <OAuthSignInButton
-                  provider="google"
-                  onClick={() => void handleProviderSignIn('google')}
-                  disabled={saving || pendingProvider !== null}
-                  loading={pendingProvider === 'google'}
-                  loadingText="Opening Google..."
-                />
+                {(!providers || providers.github) && (
+                  <OAuthSignInButton
+                    provider="github"
+                    onClick={() => void handleProviderSignIn('github')}
+                    disabled={saving || pendingProvider !== null || devLoginPending}
+                    loading={pendingProvider === 'github'}
+                    loadingText="Opening GitHub..."
+                  />
+                )}
+                {(!providers || providers.google) && (
+                  <OAuthSignInButton
+                    provider="google"
+                    onClick={() => void handleProviderSignIn('google')}
+                    disabled={saving || pendingProvider !== null || devLoginPending}
+                    loading={pendingProvider === 'google'}
+                    loadingText="Opening Google..."
+                  />
+                )}
+                {providers?.dev && (
+                  <button
+                    type="button"
+                    className="flex h-10 min-w-[280px] items-center justify-center rounded-[4px] border border-[#dadce0] bg-[#e8f5e9] px-3 text-[14px] font-medium text-[#1f1f1f] transition-colors hover:bg-[#c8e6c9] active:bg-[#a5d6a7] disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={() => void handleDevLogin()}
+                    disabled={saving || pendingProvider !== null || devLoginPending}
+                  >
+                    {devLoginPending
+                      ? 'Signing in...'
+                      : 'Dev Login (No OAuth Required)'}
+                  </button>
+                )}
               </section>
 
               <div className="flex justify-center">

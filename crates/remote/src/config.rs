@@ -307,11 +307,39 @@ impl OAuthProviderConfig {
 }
 
 #[derive(Debug, Clone)]
+pub struct KeycloakConfig {
+    client_id: String,
+    client_secret: SecretString,
+    base_url: String,
+    realm: String,
+}
+
+impl KeycloakConfig {
+    pub fn client_id(&self) -> &str {
+        &self.client_id
+    }
+
+    pub fn client_secret(&self) -> &SecretString {
+        &self.client_secret
+    }
+
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    pub fn realm(&self) -> &str {
+        &self.realm
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct AuthConfig {
     github: Option<OAuthProviderConfig>,
     google: Option<OAuthProviderConfig>,
+    keycloak: Option<KeycloakConfig>,
     jwt_secret: SecretString,
     public_base_url: String,
+    dev_auth: bool,
 }
 
 impl AuthConfig {
@@ -320,6 +348,10 @@ impl AuthConfig {
             .map_err(|_| ConfigError::MissingVar("VIBEKANBAN_REMOTE_JWT_SECRET"))?;
         validate_jwt_secret(&jwt_secret)?;
         let jwt_secret = SecretString::new(jwt_secret.into());
+
+        let dev_auth = env::var("VIBEKANBAN_DEV_AUTH")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(false);
 
         let github = match env::var("GITHUB_OAUTH_CLIENT_ID") {
             Ok(client_id) if !client_id.is_empty() => {
@@ -345,7 +377,25 @@ impl AuthConfig {
             _ => None,
         };
 
-        if github.is_none() && google.is_none() {
+        let keycloak = match env::var("KEYCLOAK_URL") {
+            Ok(base_url) if !base_url.is_empty() => {
+                let client_id = env::var("KEYCLOAK_CLIENT_ID")
+                    .map_err(|_| ConfigError::MissingVar("KEYCLOAK_CLIENT_ID"))?;
+                let client_secret = env::var("KEYCLOAK_CLIENT_SECRET")
+                    .map_err(|_| ConfigError::MissingVar("KEYCLOAK_CLIENT_SECRET"))?;
+                let realm = env::var("KEYCLOAK_REALM")
+                    .map_err(|_| ConfigError::MissingVar("KEYCLOAK_REALM"))?;
+                Some(KeycloakConfig {
+                    client_id,
+                    client_secret: SecretString::new(client_secret.into()),
+                    base_url,
+                    realm,
+                })
+            }
+            _ => None,
+        };
+
+        if github.is_none() && google.is_none() && keycloak.is_none() && !dev_auth {
             return Err(ConfigError::NoOAuthProviders);
         }
 
@@ -355,8 +405,10 @@ impl AuthConfig {
         Ok(Self {
             github,
             google,
+            keycloak,
             jwt_secret,
             public_base_url,
+            dev_auth,
         })
     }
 
@@ -368,12 +420,20 @@ impl AuthConfig {
         self.google.as_ref()
     }
 
+    pub fn keycloak(&self) -> Option<&KeycloakConfig> {
+        self.keycloak.as_ref()
+    }
+
     pub fn jwt_secret(&self) -> &SecretString {
         &self.jwt_secret
     }
 
     pub fn public_base_url(&self) -> &str {
         &self.public_base_url
+    }
+
+    pub fn dev_auth(&self) -> bool {
+        self.dev_auth
     }
 }
 

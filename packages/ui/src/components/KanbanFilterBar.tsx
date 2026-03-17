@@ -6,6 +6,7 @@ import {
   MagnifyingGlassIcon,
   PlusIcon,
   XIcon,
+  DownloadSimpleIcon,
 } from '@phosphor-icons/react';
 import { cn } from '../lib/cn';
 import type { PriorityLevel } from './PriorityIcon';
@@ -95,6 +96,7 @@ interface KanbanFilterBarProps<
   onShowWorkspacesChange: (show: boolean) => void;
   onClearFilters: () => void;
   onCreateIssue: () => void;
+  onImportFromJira?: () => void;
   shouldAnimateCreateButton: boolean;
   isMobile?: boolean;
   renderFiltersDialog?: (
@@ -129,6 +131,7 @@ export function KanbanFilterBar<
   onShowWorkspacesChange,
   onClearFilters,
   onCreateIssue,
+  onImportFromJira,
   shouldAnimateCreateButton,
   isMobile,
   renderFiltersDialog,
@@ -248,15 +251,25 @@ export function KanbanFilterBar<
               <PlusIcon className="size-icon-sm" weight="bold" />
             </button>
           ) : (
-            <PrimaryButton
-              variant="secondary"
-              value={t('kanban.newIssue', 'New issue')}
-              actionIcon={PlusIcon}
-              onClick={() => onCreateIssue()}
-              className={cn(
-                shouldAnimateCreateButton && 'create-issue-attention'
+            <>
+              {onImportFromJira && (
+                <PrimaryButton
+                  variant="tertiary"
+                  value={t('kanban.importFromJira', 'Import from Jira')}
+                  actionIcon={DownloadSimpleIcon}
+                  onClick={onImportFromJira}
+                />
               )}
-            />
+              <PrimaryButton
+                variant="secondary"
+                value={t('kanban.newIssue', 'New issue')}
+                actionIcon={PlusIcon}
+                onClick={() => onCreateIssue()}
+                className={cn(
+                  shouldAnimateCreateButton && 'create-issue-attention'
+                )}
+              />
+            </>
           )}
         </div>
       )}

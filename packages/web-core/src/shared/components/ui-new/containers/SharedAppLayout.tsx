@@ -34,6 +34,7 @@ import {
   CreateRemoteProjectDialog,
   type CreateRemoteProjectResult,
 } from '@/shared/dialogs/org/CreateRemoteProjectDialog';
+import { ImportEpicAsProjectDialog } from '@/shared/dialogs/org/ImportEpicAsProjectDialog';
 import { OAuthDialog } from '@/shared/dialogs/global/OAuthDialog';
 import { CommandBarDialog } from '@/shared/dialogs/command-bar/CommandBarDialog';
 import { useCommandBarShortcut } from '@/shared/hooks/useCommandBarShortcut';
@@ -264,6 +265,16 @@ export function SharedAppLayout() {
     }
   }, [selectedOrgId, appNavigation]);
 
+  const handleImportEpicAsProject = useCallback(async () => {
+    if (!selectedOrgId) return;
+
+    try {
+      await ImportEpicAsProjectDialog.show({ organizationId: selectedOrgId });
+    } catch {
+      // Dialog cancelled
+    }
+  }, [selectedOrgId]);
+
   const handleSignIn = useCallback(async () => {
     try {
       await OAuthDialog.show({});
@@ -317,6 +328,7 @@ export function SharedAppLayout() {
             <AppBar
               projects={orderedProjects}
               onCreateProject={handleCreateProject}
+              onImportEpicAsProject={handleImportEpicAsProject}
               onWorkspacesClick={handleWorkspacesClick}
               onProjectClick={handleProjectClick}
               onProjectsDragEnd={handleProjectsDragEnd}

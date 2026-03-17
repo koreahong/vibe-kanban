@@ -15,6 +15,7 @@ pub enum IssuePriority {
     High,
     Medium,
     Low,
+    Lowest,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -50,6 +51,12 @@ pub struct CreateIssueRequest {
     pub title: String,
     pub description: Option<String>,
     pub priority: Option<IssuePriority>,
+    /// Optional simple_id for Jira sync (e.g., "MPD-172"). If set, the DB trigger skips auto-generation.
+    #[ts(optional)]
+    pub simple_id: Option<String>,
+    /// Optional issue_number for Jira sync (e.g., 172). If set, the DB trigger skips auto-generation.
+    #[ts(optional)]
+    pub issue_number: Option<i32>,
     pub start_date: Option<DateTime<Utc>>,
     pub target_date: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,

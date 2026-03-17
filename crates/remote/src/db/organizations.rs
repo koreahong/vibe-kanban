@@ -210,13 +210,24 @@ impl<'a> OrganizationRepository<'a> {
         user_id: Uuid,
         new_name: &str,
     ) -> Result<Organization, IdentityError> {
+        self.update_organization(org_id, user_id, new_name, None).await
+    }
+
+    pub async fn update_organization(
+        &self,
+        org_id: Uuid,
+        user_id: Uuid,
+        new_name: &str,
+        new_issue_prefix: Option<&str>,
+    ) -> Result<Organization, IdentityError> {
         self.assert_admin(org_id, user_id).await?;
 
         let org = sqlx::query_as!(
             Organization,
             r#"
             UPDATE organizations
-            SET name = $2
+            SET name = $2,
+                issue_prefix = COALESCE($3, issue_prefix)
             WHERE id = $1
             RETURNING
                 id           AS "id!: Uuid",
@@ -228,7 +239,8 @@ impl<'a> OrganizationRepository<'a> {
                 updated_at   AS "updated_at!"
             "#,
             org_id,
-            new_name
+            new_name,
+            new_issue_prefix
         )
         .fetch_optional(self.pool)
         .await?

@@ -241,6 +241,8 @@ async fn create_issue(
         payload.title,
         payload.description,
         payload.priority,
+        payload.simple_id,
+        payload.issue_number,
         payload.start_date,
         payload.target_date,
         payload.completed_at,

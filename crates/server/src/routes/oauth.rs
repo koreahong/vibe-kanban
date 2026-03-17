@@ -1,4 +1,4 @@
-use api_types::{HandoffInitRequest, HandoffRedeemRequest, StatusResponse};
+use api_types::{DevLoginRequest, HandoffInitRequest, HandoffRedeemRequest, StatusResponse};
 use axum::{
     Router,
     extract::{Json, Query, State},
@@ -80,6 +80,7 @@ pub fn router() -> Router<DeploymentImpl> {
     Router::new()
         .route("/auth/handoff/init", post(handoff_init))
         .route("/auth/handoff/complete", get(handoff_complete))
+        .route("/auth/dev-login", post(dev_login))
         .route("/auth/logout", post(logout))
         .route("/auth/status", get(status))
         .route("/auth/token", get(get_token))
@@ -283,6 +284,50 @@ async fn handoff_complete(
         format!("Signed in with {provider}. You can return to the app."),
         is_desktop,
     ))
+}
+
+async fn dev_login(
+    State(deployment): State<DeploymentImpl>,
+) -> Result<ResponseJson<ApiResponse<()>>, ApiError> {
+    let client = deployment.remote_client()?;
+
+    let request = DevLoginRequest {
+        email: None,
+        name: None,
+    };
+
+    let response = client
+        .dev_login(&request)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("Dev login failed: {e}")))?;
+
+    let expires_at = extract_expiration(&response.access_token)
+        .map_err(|err| ApiError::BadRequest(format!("Invalid access token: {err}")))?;
+    let credentials = Credentials {
+        access_token: Some(response.access_token),
+        refresh_token: response.refresh_token,
+        expires_at: Some(expires_at),
+    };
+
+    deployment
+        .auth_context()
+        .save_credentials(&credentials)
+        .await
+        .map_err(|e| {
+            tracing::error!(?e, "failed to save dev auth credentials");
+            ApiError::Io(e)
+        })?;
+
+    // Fetch and cache the user's profile
+    let _ = deployment.get_login_status().await;
+
+    // Start relay if enabled
+    let relay_deployment = deployment.clone();
+    tokio::spawn(async move {
+        tunnel::spawn_relay(&relay_deployment).await;
+    });
+
+    Ok(ResponseJson(ApiResponse::success(())))
 }
 
 async fn logout(State(deployment): State<DeploymentImpl>) -> Result<StatusCode, ApiError> {

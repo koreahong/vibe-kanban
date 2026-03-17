@@ -17,6 +17,7 @@ mod context;
 mod issue_assignees;
 mod issue_relationships;
 mod issue_tags;
+mod jira;
 mod organizations;
 mod remote_issues;
 mod remote_projects;
@@ -38,6 +39,7 @@ impl McpServer {
             + Self::issue_relationships_tools_router()
             + Self::task_attempts_tools_router()
             + Self::session_tools_router()
+            + Self::jira_tools_router()
     }
 
     pub fn orchestrator_mode_router() -> rmcp::handler::server::tool::ToolRouter<Self> {

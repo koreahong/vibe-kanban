@@ -360,6 +360,343 @@ impl AuthorizationProvider for GitHubOAuthProvider {
     }
 }
 
+pub struct KeycloakOAuthProvider {
+    client: Client,
+    client_id: String,
+    client_secret: SecretString,
+    base_url: String,
+    realm: String,
+}
+
+impl KeycloakOAuthProvider {
+    pub fn new(
+        client_id: String,
+        client_secret: SecretString,
+        base_url: String,
+        realm: String,
+    ) -> Result<Self> {
+        let client = Client::builder().user_agent(USER_AGENT).build()?;
+        Ok(Self {
+            client,
+            client_id,
+            client_secret,
+            base_url: base_url.trim_end_matches('/').to_string(),
+            realm,
+        })
+    }
+
+    fn oidc_base(&self) -> String {
+        format!(
+            "{}/realms/{}/protocol/openid-connect",
+            self.base_url, self.realm
+        )
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum KeycloakTokenResponse {
+    Success {
+        access_token: String,
+        token_type: String,
+        #[serde(default)]
+        scope: Option<String>,
+        #[serde(default)]
+        expires_in: Option<i64>,
+        #[serde(default)]
+        refresh_token: Option<String>,
+        #[serde(default)]
+        id_token: Option<String>,
+    },
+    Error {
+        error: String,
+        error_description: Option<String>,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+struct KeycloakUser {
+    sub: String,
+    email: Option<String>,
+    name: Option<String>,
+    preferred_username: Option<String>,
+    #[serde(default)]
+    groups: Option<Vec<String>>,
+}
+
+#[async_trait]
+impl AuthorizationProvider for KeycloakOAuthProvider {
+    fn name(&self) -> &'static str {
+        "keycloak"
+    }
+
+    fn scopes(&self) -> &[&str] {
+        &["openid", "email", "profile"]
+    }
+
+    fn authorize_url(&self, state: &str, redirect_uri: &str) -> Result<Url> {
+        let mut url = Url::parse(&format!("{}/auth", self.oidc_base()))?;
+        {
+            let mut qp = url.query_pairs_mut();
+            qp.append_pair("client_id", &self.client_id);
+            qp.append_pair("redirect_uri", redirect_uri);
+            qp.append_pair("response_type", "code");
+            qp.append_pair("scope", &self.scopes().join(" "));
+            qp.append_pair("state", state);
+        }
+        Ok(url)
+    }
+
+    async fn exchange_code(&self, code: &str, redirect_uri: &str) -> Result<AuthorizationGrant> {
+        let response = self
+            .client
+            .post(format!("{}/token", self.oidc_base()))
+            .form(&[
+                ("client_id", self.client_id.as_str()),
+                ("client_secret", self.client_secret.expose_secret()),
+                ("code", code),
+                ("grant_type", "authorization_code"),
+                ("redirect_uri", redirect_uri),
+            ])
+            .send()
+            .await?
+            .error_for_status()?;
+
+        match response.json::<KeycloakTokenResponse>().await? {
+            KeycloakTokenResponse::Success {
+                access_token,
+                token_type,
+                scope,
+                expires_in,
+                refresh_token,
+                id_token,
+            } => {
+                let scopes = scope
+                    .unwrap_or_default()
+                    .split_whitespace()
+                    .filter_map(|v| {
+                        let trimmed = v.trim();
+                        (!trimmed.is_empty()).then_some(trimmed.to_string())
+                    })
+                    .collect();
+
+                Ok(AuthorizationGrant {
+                    access_token: SecretString::new(access_token.into()),
+                    token_type,
+                    scopes,
+                    refresh_token: refresh_token.map(|v| SecretString::new(v.into())),
+                    expires_in: expires_in.map(Duration::seconds),
+                    id_token: id_token.map(|v| SecretString::new(v.into())),
+                })
+            }
+            KeycloakTokenResponse::Error {
+                error,
+                error_description,
+            } => {
+                let detail = error_description.unwrap_or_else(|| error.clone());
+                anyhow::bail!("keycloak token exchange failed: {detail}")
+            }
+        }
+    }
+
+    async fn fetch_user(&self, access_token: &SecretString) -> Result<ProviderUser> {
+        let bearer = format!("Bearer {}", access_token.expose_secret());
+
+        let profile: KeycloakUser = self
+            .client
+            .get(format!("{}/userinfo", self.oidc_base()))
+            .header("Authorization", bearer)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+
+        let login = profile
+            .preferred_username
+            .clone()
+            .or_else(|| profile.email.clone());
+
+        Ok(ProviderUser {
+            id: profile.sub,
+            login,
+            email: profile.email,
+            name: profile.name,
+            avatar_url: None,
+        })
+    }
+
+    async fn validate_token(
+        &self,
+        token_details: &ProviderTokenDetails,
+        max_retries: u32,
+    ) -> Result<Option<ProviderTokenDetails>, TokenValidationError> {
+        // Try to use the token to call userinfo. If it's expired, try to refresh.
+        let access_token = SecretString::new(token_details.access_token.clone().into_boxed_str());
+
+        // Check if token is expired based on expires_at
+        if let Some(expires_at) = token_details.expires_at {
+            let now = chrono::Utc::now().timestamp();
+            if now >= expires_at - TOKEN_EXPIRATION_LEEWAY_SECONDS {
+                let Some(refresh_token) = &token_details.refresh_token else {
+                    return Err(TokenValidationError::InvalidOrRevoked);
+                };
+                return self
+                    .try_refresh_keycloak_token(refresh_token, max_retries)
+                    .await
+                    .map(Some);
+            }
+        }
+
+        // Validate by hitting userinfo
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            let response = match self
+                .client
+                .get(format!("{}/userinfo", self.oidc_base()))
+                .header(
+                    "Authorization",
+                    format!("Bearer {}", access_token.expose_secret()),
+                )
+                .send()
+                .await
+            {
+                Ok(resp) => resp,
+                Err(err) => {
+                    if attempt >= max_retries {
+                        return Err(TokenValidationError::temporary(format!(
+                            "keycloak userinfo request failed: {err}"
+                        )));
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_INTERVAL_SECONDS))
+                        .await;
+                    continue;
+                }
+            };
+
+            match response.status() {
+                reqwest::StatusCode::OK => return Ok(None),
+                reqwest::StatusCode::UNAUTHORIZED => {
+                    // Token expired, try refresh
+                    if let Some(refresh_token) = &token_details.refresh_token {
+                        return self
+                            .try_refresh_keycloak_token(refresh_token, max_retries)
+                            .await
+                            .map(Some);
+                    }
+                    return Err(TokenValidationError::InvalidOrRevoked);
+                }
+                status if status.is_server_error() => {
+                    if attempt >= max_retries {
+                        return Err(TokenValidationError::temporary(format!(
+                            "keycloak server error: {status}"
+                        )));
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_INTERVAL_SECONDS))
+                        .await;
+                }
+                status => {
+                    if attempt >= max_retries {
+                        return Err(TokenValidationError::temporary(format!(
+                            "unexpected keycloak status: {status}"
+                        )));
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_INTERVAL_SECONDS))
+                        .await;
+                }
+            }
+        }
+    }
+}
+
+impl KeycloakOAuthProvider {
+    async fn try_refresh_keycloak_token(
+        &self,
+        refresh_token: &str,
+        max_retries: u32,
+    ) -> Result<ProviderTokenDetails, TokenValidationError> {
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            let response = match self
+                .client
+                .post(format!("{}/token", self.oidc_base()))
+                .form(&[
+                    ("client_id", self.client_id.as_str()),
+                    ("client_secret", self.client_secret.expose_secret()),
+                    ("refresh_token", refresh_token),
+                    ("grant_type", "refresh_token"),
+                ])
+                .send()
+                .await
+            {
+                Ok(resp) => resp,
+                Err(err) => {
+                    if attempt >= max_retries {
+                        return Err(TokenValidationError::temporary(format!(
+                            "keycloak refresh request failed: {err}"
+                        )));
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_INTERVAL_SECONDS))
+                        .await;
+                    continue;
+                }
+            };
+
+            match response.status() {
+                reqwest::StatusCode::OK => {
+                    #[derive(Debug, Deserialize)]
+                    struct RefreshResponse {
+                        access_token: String,
+                        expires_in: i64,
+                        #[serde(default)]
+                        refresh_token: Option<String>,
+                    }
+
+                    let refresh_data: RefreshResponse = response
+                        .json()
+                        .await
+                        .map_err(|err| TokenValidationError::temporary(format!("{err}")))?;
+                    let expires_at = chrono::Utc::now().timestamp() + refresh_data.expires_in;
+
+                    let new_refresh_token = refresh_data
+                        .refresh_token
+                        .unwrap_or_else(|| refresh_token.to_string());
+
+                    return Ok(ProviderTokenDetails {
+                        provider: "keycloak".to_string(),
+                        access_token: refresh_data.access_token,
+                        refresh_token: Some(new_refresh_token),
+                        expires_at: Some(expires_at),
+                    });
+                }
+                reqwest::StatusCode::BAD_REQUEST => {
+                    return Err(TokenValidationError::InvalidOrRevoked);
+                }
+                status if status.is_server_error() => {
+                    if attempt >= max_retries {
+                        return Err(TokenValidationError::temporary(format!(
+                            "keycloak refresh server error: {status}"
+                        )));
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_INTERVAL_SECONDS))
+                        .await;
+                }
+                status => {
+                    if attempt >= max_retries {
+                        return Err(TokenValidationError::temporary(format!(
+                            "unexpected keycloak refresh status: {status}"
+                        )));
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_INTERVAL_SECONDS))
+                        .await;
+                }
+            }
+        }
+    }
+}
+
 pub struct GoogleOAuthProvider {
     client: Client,
     client_id: String,

@@ -76,7 +76,11 @@ impl McpServer {
         }
     }
 
-    fn url(&self, path: &str) -> String {
+    pub(crate) fn client(&self) -> &reqwest::Client {
+        &self.client
+    }
+
+    pub(crate) fn url(&self, path: &str) -> String {
         format!(
             "{}/{}",
             self.base_url.trim_end_matches('/'),

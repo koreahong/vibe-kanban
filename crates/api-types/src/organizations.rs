@@ -66,6 +66,7 @@ pub struct CreateOrganizationResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct UpdateOrganizationRequest {
     pub name: String,
+    pub issue_prefix: Option<String>,
 }
 
 // Invitation types

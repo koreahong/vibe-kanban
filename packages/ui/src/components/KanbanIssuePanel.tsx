@@ -17,6 +17,8 @@ import {
   ImageIcon,
   EyeIcon,
   PencilSimpleIcon,
+  ArrowSquareOutIcon,
+  UploadSimpleIcon,
 } from '@phosphor-icons/react';
 import {
   IssueTagsRow,
@@ -135,6 +137,10 @@ export interface KanbanIssuePanelProps {
   // More actions callback (edit mode only) - opens command bar with issue actions
   onMoreActions?: () => void;
 
+  // Jira integration (edit mode only)
+  jiraKey?: string | null;
+  onPushToJira?: () => void;
+
   // Image attachment upload
   onPasteFiles?: (files: File[]) => void;
   dropzoneProps?: {
@@ -180,6 +186,8 @@ export function KanbanIssuePanel({
   titleInputRef,
   onCopyLink,
   onMoreActions,
+  jiraKey,
+  onPushToJira,
   onPasteFiles,
   dropzoneProps,
   onBrowseAttachment,
@@ -270,6 +278,30 @@ export function KanbanIssuePanel({
           )}
         </div>
         <div className="flex items-center gap-half">
+          {!isCreateMode && jiraKey && (
+            <a
+              href={`https://qraftec.atlassian.net/browse/${jiraKey}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 px-1 py-half rounded-sm text-[10px] text-low hover:text-normal hover:bg-panel transition-colors"
+              title={`View ${jiraKey} in Jira`}
+            >
+              <ArrowSquareOutIcon className="size-icon-xs" weight="bold" />
+              {jiraKey}
+            </a>
+          )}
+          {!isCreateMode && !jiraKey && onPushToJira && (
+            <button
+              type="button"
+              onClick={onPushToJira}
+              className="flex items-center gap-1 px-1 py-half rounded-sm text-[10px] text-low hover:text-normal hover:bg-panel transition-colors"
+              aria-label="Push to Jira"
+              title="Push to Jira"
+            >
+              <UploadSimpleIcon className="size-icon-xs" weight="bold" />
+              Jira
+            </button>
+          )}
           {!isCreateMode && onMoreActions && (
             <button
               type="button"

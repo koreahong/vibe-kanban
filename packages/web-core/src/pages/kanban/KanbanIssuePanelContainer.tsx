@@ -866,6 +866,30 @@ export function KanbanIssuePanelContainer({
     });
   }, [selectedKanbanIssueId, projectId]);
 
+  // Jira integration - detect Jira key from simple_id or extension_metadata
+  const jiraKey = useMemo(() => {
+    if (!selectedIssue) return null;
+    const jiraKeyPattern = /^[A-Z]+-\d+$/;
+    // Check extension_metadata first
+    const metaKey = selectedIssue.extension_metadata?.jira_key;
+    if (typeof metaKey === 'string' && jiraKeyPattern.test(metaKey)) return metaKey;
+    // Fall back to simple_id
+    if (jiraKeyPattern.test(selectedIssue.simple_id)) return selectedIssue.simple_id;
+    return null;
+  }, [selectedIssue]);
+
+  const handlePushToJira = useCallback(async () => {
+    if (!selectedKanbanIssueId) return;
+    try {
+      const { jiraApi } = await import('@/shared/lib/api');
+      const result = await jiraApi.pushToJira(selectedKanbanIssueId);
+      // Open the created Jira issue in a new tab
+      window.open(result.jira_url, '_blank');
+    } catch (e) {
+      console.error('Failed to push to Jira:', e);
+    }
+  }, [selectedKanbanIssueId]);
+
   // Loading state
   const isLoading = projectLoading || orgLoading;
   const isResolvingExpectedIssue =
@@ -931,6 +955,8 @@ export function KanbanIssuePanelContainer({
       }
       onCopyLink={mode === 'edit' ? handleCopyLink : undefined}
       onMoreActions={mode === 'edit' ? handleMoreActions : undefined}
+      jiraKey={mode === 'edit' ? jiraKey : null}
+      onPushToJira={mode === 'edit' ? handlePushToJira : undefined}
       onPasteFiles={onPasteFiles}
       dropzoneProps={{ getRootProps, getInputProps, isDragActive }}
       onBrowseAttachment={openFilePicker}

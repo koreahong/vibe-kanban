@@ -25,6 +25,7 @@ mod billing {
     }
 }
 pub mod attachments;
+mod dev_auth;
 pub(crate) mod electric_proxy;
 pub(crate) mod error;
 mod github_app;
@@ -99,6 +100,7 @@ pub fn router(state: AppState) -> Router {
     let v1_public = Router::<AppState>::new()
         .route("/health", get(health))
         .merge(oauth::public_router())
+        .merge(dev_auth::router())
         .merge(organization_members::public_router())
         .merge(tokens::public_router())
         .merge(review::public_router())

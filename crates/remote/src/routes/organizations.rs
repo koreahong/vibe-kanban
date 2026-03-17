@@ -159,10 +159,28 @@ pub async fn update_organization(
         ));
     }
 
+    // Validate issue_prefix if provided
+    if let Some(ref prefix) = payload.issue_prefix {
+        let prefix = prefix.trim();
+        if prefix.is_empty() || prefix.len() > 10 {
+            return Err(ErrorResponse::new(
+                StatusCode::BAD_REQUEST,
+                "Issue prefix must be between 1 and 10 characters",
+            ));
+        }
+        if !prefix.chars().all(|c| c.is_ascii_alphanumeric()) {
+            return Err(ErrorResponse::new(
+                StatusCode::BAD_REQUEST,
+                "Issue prefix can only contain alphanumeric characters",
+            ));
+        }
+    }
+
     let org_repo = OrganizationRepository::new(&state.pool);
 
+    let issue_prefix = payload.issue_prefix.as_deref().map(|p| p.trim());
     let organization = org_repo
-        .update_organization_name(org_id, ctx.user.id, name)
+        .update_organization(org_id, ctx.user.id, name, issue_prefix)
         .await
         .map_err(|e| match e {
             IdentityError::PermissionDenied => {
