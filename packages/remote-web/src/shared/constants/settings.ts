@@ -4,4 +4,5 @@ export const REMOTE_SETTINGS_SECTIONS: SettingsSectionType[] = [
   "organizations",
   "remote-projects",
   "relay",
+  "jira",
 ];

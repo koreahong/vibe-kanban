@@ -32,6 +32,7 @@ mod github_app;
 pub mod hosts;
 mod identity;
 pub mod issue_assignees;
+mod jira;
 pub mod issue_comment_reactions;
 pub mod issue_comments;
 pub mod issue_followers;
@@ -136,6 +137,13 @@ pub fn router(state: AppState) -> Router {
             require_session,
         ));
 
+    let api_protected = Router::<AppState>::new()
+        .merge(jira::router())
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_session,
+        ));
+
     let static_dir = "/srv/static";
     let spa =
         ServeDir::new(static_dir).fallback(ServeFile::new(format!("{static_dir}/index.html")));
@@ -143,6 +151,7 @@ pub fn router(state: AppState) -> Router {
     Router::<AppState>::new()
         .nest("/v1", v1_public)
         .nest("/v1", v1_protected)
+        .nest("/api", api_protected)
         .fallback_service(spa)
         .layer(middleware::from_fn(
             crate::middleware::version::add_version_headers,
