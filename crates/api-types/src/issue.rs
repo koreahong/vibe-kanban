@@ -18,7 +18,7 @@ pub enum IssuePriority {
     Lowest,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, TS)]
 pub struct Issue {
     pub id: Uuid,
     pub project_id: Uuid,

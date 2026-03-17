@@ -222,26 +222,18 @@ impl<'a> OrganizationRepository<'a> {
     ) -> Result<Organization, IdentityError> {
         self.assert_admin(org_id, user_id).await?;
 
-        let org = sqlx::query_as!(
-            Organization,
+        let org: Organization = sqlx::query_as(
             r#"
             UPDATE organizations
             SET name = $2,
                 issue_prefix = COALESCE($3, issue_prefix)
             WHERE id = $1
-            RETURNING
-                id           AS "id!: Uuid",
-                name         AS "name!",
-                slug         AS "slug!",
-                is_personal  AS "is_personal!",
-                issue_prefix AS "issue_prefix!",
-                created_at   AS "created_at!",
-                updated_at   AS "updated_at!"
+            RETURNING *
             "#,
-            org_id,
-            new_name,
-            new_issue_prefix
         )
+        .bind(org_id)
+        .bind(new_name)
+        .bind(new_issue_prefix)
         .fetch_optional(self.pool)
         .await?
         .ok_or(IdentityError::NotFound)?;
