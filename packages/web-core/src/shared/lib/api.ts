@@ -1605,12 +1605,12 @@ export interface JiraPushResponse {
 
 export const jiraApi = {
   getConfig: async (): Promise<JiraConfig | null> => {
-    const response = await makeRequest('/api/jira/config');
+    const response = await makeRequest('/api/remote/jira/config');
     return handleApiResponse<JiraConfig | null>(response);
   },
 
   updateConfig: async (config: JiraConfig): Promise<JiraConfig> => {
-    const response = await makeRequest('/api/jira/config', {
+    const response = await makeRequest('/api/remote/jira/config', {
       method: 'PUT',
       body: JSON.stringify(config),
     });
@@ -1625,7 +1625,7 @@ export const jiraApi = {
     const params = new URLSearchParams({ q: query });
     if (issueType) params.set('type', issueType);
     if (max) params.set('max', String(max));
-    const response = await makeRequest(`/api/jira/search?${params.toString()}`);
+    const response = await makeRequest(`/api/remote/jira/search?${params.toString()}`);
     return handleApiResponse<JiraSearchResponse>(response);
   },
 
@@ -1633,7 +1633,7 @@ export const jiraApi = {
     jiraKey: string,
     projectId: string
   ): Promise<JiraImportResponse> => {
-    const response = await makeRequest('/api/jira/import', {
+    const response = await makeRequest('/api/remote/jira/import', {
       method: 'POST',
       body: JSON.stringify({ jira_key: jiraKey, project_id: projectId }),
     });
@@ -1645,7 +1645,7 @@ export const jiraApi = {
     organizationId: string,
     includeIssues?: boolean
   ): Promise<JiraImportEpicResponse> => {
-    const response = await makeRequest('/api/jira/import-epic', {
+    const response = await makeRequest('/api/remote/jira/import-epic', {
       method: 'POST',
       body: JSON.stringify({
         epic_key: epicKey,
@@ -1660,7 +1660,7 @@ export const jiraApi = {
     issueId: string,
     projectKey?: string
   ): Promise<JiraPushResponse> => {
-    const response = await makeRequest('/api/jira/push', {
+    const response = await makeRequest('/api/remote/jira/push', {
       method: 'POST',
       body: JSON.stringify({
         issue_id: issueId,

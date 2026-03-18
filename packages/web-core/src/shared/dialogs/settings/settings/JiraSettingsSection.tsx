@@ -29,7 +29,7 @@ export function JiraSettingsSectionContent() {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    jiraApiFetch('/api/jira/config')
+    jiraApiFetch('/jira/config')
       .then((res) => (res.ok ? res.json() : null))
       .then((cfg) => {
         if (cfg) setConfig(cfg);
@@ -42,7 +42,7 @@ export function JiraSettingsSectionContent() {
     setSaving(true);
     setMessage(null);
     try {
-      const res = await jiraApiFetch('/api/jira/config', {
+      const res = await jiraApiFetch('/jira/config', {
         method: 'PUT',
         body: JSON.stringify(config),
       });
