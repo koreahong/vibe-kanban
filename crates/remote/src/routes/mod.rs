@@ -137,13 +137,6 @@ pub fn router(state: AppState) -> Router {
             require_session,
         ));
 
-    let api_protected = Router::<AppState>::new()
-        .merge(jira::router())
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_session,
-        ));
-
     let static_dir = "/srv/static";
     let spa =
         ServeDir::new(static_dir).fallback(ServeFile::new(format!("{static_dir}/index.html")));
@@ -151,7 +144,7 @@ pub fn router(state: AppState) -> Router {
     Router::<AppState>::new()
         .nest("/v1", v1_public)
         .nest("/v1", v1_protected)
-        .nest("/api", api_protected)
+        .nest("/api/remote", jira::router())
         .fallback_service(spa)
         .layer(middleware::from_fn(
             crate::middleware::version::add_version_headers,

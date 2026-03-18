@@ -3,11 +3,10 @@ import { Button } from '@vibe/ui/components/Button';
 import { Input } from '@vibe/ui/components/Input';
 import type { JiraConfig } from '@/shared/lib/api';
 
-// Direct fetch to remote server (bypasses relay transport which requires host context)
-const JIRA_API_BASE = '';
-
+// Uses /api/remote/ prefix so the relay transport in remote-web skips relay
+// and fetches directly from the remote server (see shouldRelayApiPath).
 async function jiraApiFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  return fetch(`${JIRA_API_BASE}${path}`, {
+  return fetch(`/api/remote${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
