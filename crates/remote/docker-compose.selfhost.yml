@@ -11,7 +11,7 @@ services:
       POSTGRES_USER: vibekanban
       POSTGRES_PASSWORD: ${DB_PASSWORD:-vibekanban}
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U vibekanban -d vibekanban"]
       interval: 5s
@@ -24,7 +24,7 @@ services:
     image: mcr.microsoft.com/azure-storage/azurite:latest
     command: "azurite-blob --blobHost 0.0.0.0 --blobPort 10000 --loose --skipApiVersionCheck"
     volumes:
-      - azurite-data:/data
+      - ./data/azurite:/data
     healthcheck:
       test: nc 127.0.0.1 10000 -z
       interval: 1s
@@ -56,7 +56,7 @@ services:
       ELECTRIC_USAGE_REPORTING: false
       ELECTRIC_FEATURE_FLAGS: allow_subqueries,tagged_subqueries
     volumes:
-      - electric-data:/app/persistent
+      - ./data/electric:/app/persistent
     depends_on:
       db:
         condition: service_healthy
@@ -123,7 +123,5 @@ services:
       - "0.0.0.0:8082:8082"
     restart: unless-stopped
 
-volumes:
-  db-data:
-  electric-data:
-  azurite-data:
+# Data volumes use bind mounts (./data/) for safe persistence across docker volume rm operations
+# Run: mkdir -p data/postgres data/electric data/azurite before first start
