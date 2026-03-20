@@ -78,7 +78,7 @@ services:
       SERVER_LISTEN_ADDR: 0.0.0.0:8081
       ELECTRIC_URL: http://electric:3000
       ELECTRIC_ROLE_PASSWORD: ${ELECTRIC_ROLE_PASSWORD:-vibekanban}
-      VIBEKANBAN_REMOTE_JWT_SECRET: ${VIBEKANBAN_REMOTE_JWT_SECRET:?Generate with: openssl rand -base64 48}
+      VIBEKANBAN_REMOTE_JWT_SECRET: "${VIBEKANBAN_REMOTE_JWT_SECRET:?Generate with: openssl rand -base64 48}"
       VIBEKANBAN_DEV_AUTH: ${VIBEKANBAN_DEV_AUTH:-false}
       SERVER_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       # OAuth (optional if dev auth is enabled)
@@ -118,7 +118,7 @@ services:
       RUST_LOG: info
       SERVER_DATABASE_URL: postgres://vibekanban:${DB_PASSWORD:-vibekanban}@db:5432/vibekanban
       RELAY_LISTEN_ADDR: 0.0.0.0:8082
-      VIBEKANBAN_REMOTE_JWT_SECRET: ${VIBEKANBAN_REMOTE_JWT_SECRET:?Generate with: openssl rand -base64 48}
+      VIBEKANBAN_REMOTE_JWT_SECRET: "${VIBEKANBAN_REMOTE_JWT_SECRET:?Generate with: openssl rand -base64 48}"
     ports:
       - "0.0.0.0:8082:8082"
     restart: unless-stopped
