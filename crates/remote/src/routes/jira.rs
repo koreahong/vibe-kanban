@@ -157,8 +157,10 @@ async fn search(
     let jql = build_jql(&query, params.issue_type.as_deref(), &cfg.jira_project_key);
     let max = params.max.unwrap_or(10);
 
+    // Only request fields needed for display — skip description/subtasks/issuelinks
+    let search_fields = &["summary", "status", "priority", "assignee", "issuetype", "parent", "updated"];
     let response = client
-        .search_issues(&jql, None, max)
+        .search_issues(&jql, Some(search_fields), max)
         .await
         .map_err(|e| ErrorResponse::new(StatusCode::BAD_REQUEST, format!("Jira search failed: {e}")))?;
 

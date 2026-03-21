@@ -120,6 +120,12 @@ pub struct JiraCreateResponse {
     pub key: String,
 }
 
+static SHARED_HTTP_CLIENT: std::sync::OnceLock<Client> = std::sync::OnceLock::new();
+
+fn shared_client() -> &'static Client {
+    SHARED_HTTP_CLIENT.get_or_init(Client::new)
+}
+
 impl JiraClient {
     pub fn new(base_url: &str, email: &str, api_token: &str) -> Self {
         let credentials = format!("{email}:{api_token}");
@@ -127,7 +133,7 @@ impl JiraClient {
         Self {
             base_url: base_url.trim_end_matches('/').to_string(),
             auth_header,
-            client: Client::new(),
+            client: shared_client().clone(),
         }
     }
 

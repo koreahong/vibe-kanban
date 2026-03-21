@@ -147,39 +147,31 @@ const JiraImportDialogImpl = create<JiraImportDialogProps>((props) => {
               className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 group"
             >
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-muted-foreground">
-                    {issue.key}
-                  </span>
-                  <Badge variant="outline" className="text-[10px]">
-                    {issue.issuetype}
-                  </Badge>
-                  <span
-                    className={`text-[10px] ${priorityColor[issue.priority] ?? 'text-muted-foreground'}`}
-                  >
-                    {issue.priority}
-                  </span>
-                </div>
-                <div className="text-sm truncate">{issue.summary}</div>
-                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                  <span>{issue.status}</span>
-                  {issue.parent_key && (
-                    <>
-                      <span>·</span>
-                      <span className="font-mono">
-                        {issue.parent_summary
-                          ? `${issue.parent_key} ${issue.parent_summary}`
-                          : issue.parent_key}
-                      </span>
-                    </>
-                  )}
+                <div className="text-sm font-medium truncate">{issue.summary}</div>
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
+                  <span className="font-mono">{issue.key}</span>
+                  <span>·</span>
                   {issue.assignee && (
                     <>
-                      <span>·</span>
                       <span>{issue.assignee}</span>
+                      <span>·</span>
                     </>
                   )}
+                  <span className={priorityColor[issue.priority] ?? 'text-muted-foreground'}>
+                    {issue.priority}
+                  </span>
+                  <span>·</span>
+                  <span>{issue.issuetype}</span>
+                  <span>·</span>
+                  <span>{issue.status}</span>
                 </div>
+                {issue.parent_key && (
+                  <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                    Epic: {issue.parent_summary
+                      ? `${issue.parent_key} · ${issue.parent_summary}`
+                      : issue.parent_key}
+                  </div>
+                )}
               </div>
               <div className="shrink-0">
                 {imported.has(issue.key) ? (
