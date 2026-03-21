@@ -1603,10 +1603,26 @@ export interface JiraPushResponse {
   jira_url: string;
 }
 
+// Jira backend returns raw JSON (not wrapped in { success, data }),
+// so we parse directly instead of using handleApiResponse.
+const handleJiraResponse = async <T>(response: Response): Promise<T> => {
+  if (!response.ok) {
+    let errorMessage = `Request failed with status ${response.status}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.error || errorData.message || errorMessage;
+    } catch {
+      errorMessage = response.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
+  return response.json() as Promise<T>;
+};
+
 export const jiraApi = {
   getConfig: async (): Promise<JiraConfig | null> => {
     const response = await makeRequest('/api/remote/jira/config');
-    return handleApiResponse<JiraConfig | null>(response);
+    return handleJiraResponse<JiraConfig | null>(response);
   },
 
   updateConfig: async (config: JiraConfig): Promise<JiraConfig> => {
@@ -1614,7 +1630,7 @@ export const jiraApi = {
       method: 'PUT',
       body: JSON.stringify(config),
     });
-    return handleApiResponse<JiraConfig>(response);
+    return handleJiraResponse<JiraConfig>(response);
   },
 
   search: async (
@@ -1626,7 +1642,7 @@ export const jiraApi = {
     if (issueType) params.set('type', issueType);
     if (max) params.set('max', String(max));
     const response = await makeRequest(`/api/remote/jira/search?${params.toString()}`);
-    return handleApiResponse<JiraSearchResponse>(response);
+    return handleJiraResponse<JiraSearchResponse>(response);
   },
 
   importIssue: async (
@@ -1637,7 +1653,7 @@ export const jiraApi = {
       method: 'POST',
       body: JSON.stringify({ jira_key: jiraKey, project_id: projectId }),
     });
-    return handleApiResponse<JiraImportResponse>(response);
+    return handleJiraResponse<JiraImportResponse>(response);
   },
 
   importEpic: async (
@@ -1653,7 +1669,7 @@ export const jiraApi = {
         include_issues: includeIssues ?? true,
       }),
     });
-    return handleApiResponse<JiraImportEpicResponse>(response);
+    return handleJiraResponse<JiraImportEpicResponse>(response);
   },
 
   pushToJira: async (
@@ -1667,6 +1683,6 @@ export const jiraApi = {
         project_key: projectKey,
       }),
     });
-    return handleApiResponse<JiraPushResponse>(response);
+    return handleJiraResponse<JiraPushResponse>(response);
   },
 };
