@@ -96,6 +96,7 @@ const JiraImportDialogImpl = create<JiraImportDialogProps>((props) => {
       ? { action: 'imported', importedKeys: Array.from(imported) }
       : { action: 'canceled' };
     modal.resolve(result);
+    modal.hide();
   };
 
   return (
