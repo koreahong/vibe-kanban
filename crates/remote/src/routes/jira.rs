@@ -42,6 +42,7 @@ pub struct JiraSearchResult {
     pub assignee: Option<String>,
     pub issuetype: String,
     pub parent_key: Option<String>,
+    pub parent_summary: Option<String>,
     pub updated: Option<String>,
 }
 
@@ -174,6 +175,9 @@ async fn search(
                 assignee: f.assignee.as_ref().and_then(|a| a.display_name.clone()),
                 issuetype: f.issuetype.as_ref().map(|t| t.name.clone()).unwrap_or_default(),
                 parent_key: f.parent.as_ref().map(|p| p.key.clone()),
+                parent_summary: f.parent.as_ref().and_then(|p| {
+                    p.fields.as_ref().and_then(|pf| pf.summary.clone())
+                }),
                 updated: f.updated.clone(),
             }
         })

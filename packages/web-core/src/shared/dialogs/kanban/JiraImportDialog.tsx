@@ -166,7 +166,11 @@ const JiraImportDialogImpl = create<JiraImportDialogProps>((props) => {
                   {issue.parent_key && (
                     <>
                       <span>·</span>
-                      <span className="font-mono">Epic: {issue.parent_key}</span>
+                      <span className="font-mono">
+                        {issue.parent_summary
+                          ? `${issue.parent_key} ${issue.parent_summary}`
+                          : issue.parent_key}
+                      </span>
                     </>
                   )}
                   {issue.assignee && (
@@ -188,7 +192,7 @@ const JiraImportDialogImpl = create<JiraImportDialogProps>((props) => {
                     size="sm"
                     onClick={() => handleImport(issue)}
                     disabled={importing.has(issue.key)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                    className=""
                   >
                     {importing.has(issue.key) ? (
                       <Loader2 className="h-3 w-3 animate-spin mr-1" />

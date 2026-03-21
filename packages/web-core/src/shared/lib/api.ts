@@ -1571,6 +1571,7 @@ export interface JiraConfig {
 export interface JiraSearchResult {
   key: string;
   summary: string;
+  parent_summary?: string;
   status: string;
   priority: string;
   assignee: string | null;
