@@ -1,6 +1,6 @@
 CREATE ROLE electric_sync WITH LOGIN REPLICATION;
 
-GRANT CONNECT ON DATABASE remote TO electric_sync;
+DO $$ BEGIN EXECUTE format('GRANT CONNECT ON DATABASE %I TO electric_sync', current_database()); END $$;
 GRANT USAGE ON SCHEMA public TO electric_sync;
 
 CREATE PUBLICATION electric_publication_default;
