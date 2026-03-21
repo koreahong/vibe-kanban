@@ -83,6 +83,11 @@ impl OAuthTokenValidator {
         user_id: Uuid,
         session_id: Uuid,
     ) -> Result<(), OAuthTokenValidationError> {
+        // Dev auth users don't have OAuth accounts — skip validation entirely
+        if provider_name == "dev" {
+            return Ok(());
+        }
+
         let oauth_account_repo = OAuthAccountRepository::new(&self.pool);
         let account = match oauth_account_repo
             .get_by_user_provider(user_id, provider_name)

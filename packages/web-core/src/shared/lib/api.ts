@@ -1649,7 +1649,9 @@ export const jiraApi = {
     jiraKey: string,
     projectId: string
   ): Promise<JiraImportResponse> => {
-    const response = await makeRequest('/api/remote/jira/import', {
+    // Use makeRemoteRequest to send the Authorization: Bearer token header
+    // (required by the backend to create issues in the DB)
+    const response = await makeRemoteRequest('/api/remote/jira/import', {
       method: 'POST',
       body: JSON.stringify({ jira_key: jiraKey, project_id: projectId }),
     });

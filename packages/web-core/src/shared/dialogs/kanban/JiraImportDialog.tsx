@@ -163,9 +163,15 @@ const JiraImportDialogImpl = create<JiraImportDialogProps>((props) => {
                 <div className="text-sm truncate">{issue.summary}</div>
                 <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                   <span>{issue.status}</span>
+                  {issue.parent_key && (
+                    <>
+                      <span>·</span>
+                      <span className="font-mono">Epic: {issue.parent_key}</span>
+                    </>
+                  )}
                   {issue.assignee && (
                     <>
-                      <span>-</span>
+                      <span>·</span>
                       <span>{issue.assignee}</span>
                     </>
                   )}

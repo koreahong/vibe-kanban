@@ -1,17 +1,26 @@
+use api_types::IssuePriority;
 use axum::{
     Json, Router,
-    extract::Query,
-    http::StatusCode,
+    extract::{Query, State},
+    http::{HeaderMap, StatusCode},
     routing::{get, post},
 };
+use axum_extra::headers::{Authorization, HeaderMapExt, authorization::Bearer};
 use jira::{
     client::JiraClient,
     config::{self, JiraConfig},
     mapper::{map_jira_issue_to_vk, map_vk_issue_to_jira_fields},
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
-use crate::AppState;
+use crate::{
+    AppState,
+    db::{
+        issues::IssueRepository,
+        project_statuses::ProjectStatusRepository,
+    },
+};
 use super::error::ErrorResponse;
 
 // --- Request/Response types ---
@@ -106,10 +115,11 @@ fn make_client(cfg: &JiraConfig) -> JiraClient {
 
 fn build_jql(query: &str, issue_type: Option<&str>, project_key: &str) -> String {
     let key_pattern = regex::Regex::new(r"^[A-Z]+-\d+$").unwrap();
+    let query_upper = query.to_uppercase();
     let mut conditions = vec![format!("project = {}", project_key)];
 
-    if key_pattern.is_match(query) {
-        conditions.push(format!("key = \"{}\"", query));
+    if key_pattern.is_match(&query_upper) {
+        conditions.push(format!("key = \"{}\"", query_upper));
     } else if !query.is_empty() {
         conditions.push(format!("text ~ \"{}\"", query));
     }
@@ -174,11 +184,30 @@ async fn search(
 }
 
 async fn import_issue(
+    State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<JiraImportRequest>,
 ) -> Result<Json<JiraImportResponse>, ErrorResponse> {
     let cfg = load_config_or_err()?;
     let client = make_client(&cfg);
 
+    // Require auth via Bearer token
+    let creator_user_id = {
+        let bearer = headers
+            .typed_get::<Authorization<Bearer>>()
+            .ok_or_else(|| ErrorResponse::new(StatusCode::UNAUTHORIZED, "Authentication required for Jira import"))?;
+        match crate::auth::request_context_from_access_token(&state, bearer.0.token()).await {
+            Ok(ctx) => ctx.user.id,
+            Err(_) => return Err(ErrorResponse::new(StatusCode::UNAUTHORIZED, "Invalid auth token")),
+        }
+    };
+
+    // Parse project_id
+    let project_id: Uuid = payload.project_id.parse().map_err(|_| {
+        ErrorResponse::new(StatusCode::BAD_REQUEST, "Invalid project_id UUID")
+    })?;
+
+    // Fetch issue from Jira
     let jira_issue = client
         .get_issue(&payload.jira_key)
         .await
@@ -186,9 +215,65 @@ async fn import_issue(
 
     let vk_fields = map_jira_issue_to_vk(&jira_issue, &cfg.user_mappings);
 
+    // Resolve project status: match by name, fallback to first visible status
+    let statuses = ProjectStatusRepository::list_by_project(state.pool(), project_id)
+        .await
+        .map_err(|e| ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to load statuses: {e}")))?;
+
+    let status_candidates: &[&str] = match vk_fields.status.as_str() {
+        "todo" => &["To do", "To Do", "Backlog"],
+        "inprogress" => &["In progress", "In Progress"],
+        "done" => &["Done"],
+        "cancelled" => &["Cancelled", "Canceled"],
+        _ => &["To do", "To Do", "Backlog"],
+    };
+
+    let status_id = statuses
+        .iter()
+        .find(|s| status_candidates.iter().any(|n| s.name.eq_ignore_ascii_case(n)))
+        .or_else(|| statuses.iter().find(|s| !s.hidden))
+        .or_else(|| statuses.first())
+        .map(|s| s.id)
+        .ok_or_else(|| ErrorResponse::new(StatusCode::BAD_REQUEST, "Project has no statuses"))?;
+
+    // Map priority
+    let priority: Option<IssuePriority> = match vk_fields.priority.as_str() {
+        "urgent" => Some(IssuePriority::Urgent),
+        "high" => Some(IssuePriority::High),
+        "low" => Some(IssuePriority::Low),
+        "lowest" => Some(IssuePriority::Lowest),
+        _ => Some(IssuePriority::Medium),
+    };
+
+    let description = if vk_fields.description.is_empty() {
+        None
+    } else {
+        Some(vk_fields.description)
+    };
+
+    // Create issue in DB
+    let response = IssueRepository::create(
+        state.pool(),
+        None,
+        project_id,
+        status_id,
+        vk_fields.title.clone(),
+        description,
+        priority,
+        Some(vk_fields.simple_id.clone()),
+        vk_fields.issue_number,
+        None, None, None,
+        0.0,
+        None, None,
+        serde_json::json!({}),
+        creator_user_id,
+    )
+    .await
+    .map_err(|e| ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create issue: {e}")))?;
+
     Ok(Json(JiraImportResponse {
         jira_key: payload.jira_key,
-        title: vk_fields.title,
+        title: response.data.title,
         status: vk_fields.status,
         priority: vk_fields.priority,
     }))
