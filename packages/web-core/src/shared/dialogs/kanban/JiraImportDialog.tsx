@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -45,18 +45,28 @@ const JiraImportDialogImpl = create<JiraImportDialogProps>((props) => {
   const [importing, setImporting] = useState<Set<string>>(new Set());
   const [imported, setImported] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const handleSearch = useCallback(async () => {
     if (!query.trim()) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     setError(null);
     try {
       const response: JiraSearchResponse = await jiraApi.search(query, undefined, 20);
-      setResults(response.issues);
+      if (!controller.signal.aborted) {
+        setResults(response.issues);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Search failed');
+      if (!controller.signal.aborted) {
+        setError(e instanceof Error ? e.message : 'Search failed');
+      }
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   }, [query]);
 
@@ -147,27 +157,34 @@ const JiraImportDialogImpl = create<JiraImportDialogProps>((props) => {
               className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 group"
             >
               <div className="flex-1 min-w-0">
+                {/* Line 1: Summary */}
                 <div className="text-sm font-medium truncate">{issue.summary}</div>
+                {/* Line 2: issuetype · status · duedate · priority · assignee */}
                 <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
-                  <span className="font-mono">{issue.key}</span>
-                  <span>·</span>
-                  {issue.assignee && (
-                    <>
-                      <span>{issue.assignee}</span>
-                      <span>·</span>
-                    </>
-                  )}
-                  <span className={priorityColor[issue.priority] ?? 'text-muted-foreground'}>
-                    {issue.priority}
-                  </span>
-                  <span>·</span>
                   <span>{issue.issuetype}</span>
                   <span>·</span>
                   <span>{issue.status}</span>
+                  {issue.duedate && (
+                    <>
+                      <span>·</span>
+                      <span>{issue.duedate}</span>
+                    </>
+                  )}
+                  <span>·</span>
+                  <span className={priorityColor[issue.priority] ?? 'text-muted-foreground'}>
+                    {issue.priority}
+                  </span>
+                  {issue.assignee && (
+                    <>
+                      <span>·</span>
+                      <span>{issue.assignee}</span>
+                    </>
+                  )}
                 </div>
+                {/* Line 3: epic key · epic title */}
                 {issue.parent_key && (
                   <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                    Epic: {issue.parent_summary
+                    {issue.parent_summary
                       ? `${issue.parent_key} · ${issue.parent_summary}`
                       : issue.parent_key}
                   </div>

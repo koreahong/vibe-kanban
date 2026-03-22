@@ -43,6 +43,7 @@ pub struct JiraIssueFields {
     pub issuelinks: Option<Vec<JiraIssueLink>>,
     pub updated: Option<String>,
     pub issuetype: Option<JiraIssueType>,
+    pub duedate: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -118,6 +119,19 @@ struct JiraTransitionsResponse {
 pub struct JiraCreateResponse {
     pub id: String,
     pub key: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct JiraComment {
+    pub id: Option<String>,
+    pub author: Option<JiraUser>,
+    pub body: Option<Value>,
+    pub created: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct JiraCommentsResponse {
+    comments: Vec<JiraComment>,
 }
 
 static SHARED_HTTP_CLIENT: std::sync::OnceLock<Client> = std::sync::OnceLock::new();
@@ -345,6 +359,23 @@ impl JiraClient {
                 ))
             }
         }
+    }
+
+    // --- Comments ---
+
+    pub async fn get_issue_comments(&self, issue_key: &str) -> Result<Vec<JiraComment>, String> {
+        let resp = self
+            .request(
+                reqwest::Method::GET,
+                &format!("/issue/{issue_key}/comment"),
+                None,
+            )
+            .await?
+            .ok_or("Empty comments response")?;
+
+        let result: JiraCommentsResponse = serde_json::from_value(resp)
+            .map_err(|e| format!("Failed to parse comments: {e}"))?;
+        Ok(result.comments)
     }
 
     // --- Assignee ---

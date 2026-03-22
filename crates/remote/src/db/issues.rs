@@ -70,6 +70,45 @@ impl IssueRepository {
         Ok(record)
     }
 
+    pub async fn find_by_simple_id_in_project(
+        pool: &PgPool,
+        simple_id: &str,
+        project_id: Uuid,
+    ) -> Result<Option<Issue>, IssueError> {
+        let record = sqlx::query_as!(
+            Issue,
+            r#"
+            SELECT
+                id                  AS "id!: Uuid",
+                project_id          AS "project_id!: Uuid",
+                issue_number        AS "issue_number!",
+                simple_id           AS "simple_id!",
+                status_id           AS "status_id!: Uuid",
+                title               AS "title!",
+                description         AS "description?",
+                priority            AS "priority: IssuePriority",
+                start_date          AS "start_date?: DateTime<Utc>",
+                target_date         AS "target_date?: DateTime<Utc>",
+                completed_at        AS "completed_at?: DateTime<Utc>",
+                sort_order          AS "sort_order!",
+                parent_issue_id     AS "parent_issue_id?: Uuid",
+                parent_issue_sort_order AS "parent_issue_sort_order?",
+                extension_metadata  AS "extension_metadata!: Value",
+                creator_user_id     AS "creator_user_id?: Uuid",
+                created_at          AS "created_at!: DateTime<Utc>",
+                updated_at          AS "updated_at!: DateTime<Utc>"
+            FROM issues
+            WHERE simple_id = $1 AND project_id = $2
+            "#,
+            simple_id,
+            project_id
+        )
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(record)
+    }
+
     pub async fn organization_id(
         pool: &PgPool,
         issue_id: Uuid,

@@ -1578,6 +1578,7 @@ export interface JiraSearchResult {
   issuetype: string;
   parent_key: string | null;
   updated: string | null;
+  duedate: string | null;
 }
 
 export interface JiraSearchResponse {

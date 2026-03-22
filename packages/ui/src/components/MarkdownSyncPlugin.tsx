@@ -96,11 +96,19 @@ export function MarkdownSyncPlugin({
 
       if (markdown === lastSerializedRef.current) return;
 
+      // In display (read-only) mode, don't propagate Lexical's normalized output
+      // back to the parent. $convertFromMarkdownString may produce slightly
+      // different markdown (e.g. extra blank lines), which when stored and
+      // re-parsed with editTransformers would strip heading syntax and render
+      // headings as raw text.
+      if (!editable) return;
+
       lastSerializedRef.current = markdown;
       onChange(markdown);
     });
   }, [
     editor,
+    editable,
     onChange,
     onEditorStateChange,
     transformers,
