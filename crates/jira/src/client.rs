@@ -278,9 +278,14 @@ impl JiraClient {
         Ok(all_issues)
     }
 
-    pub async fn get_issue(&self, issue_key: &str) -> Result<JiraIssue, String> {
+    pub async fn get_issue(&self, issue_key: &str, fields: Option<&[&str]>) -> Result<JiraIssue, String> {
+        let path = if let Some(f) = fields {
+            format!("/issue/{}?fields={}", issue_key, f.join(","))
+        } else {
+            format!("/issue/{}", issue_key)
+        };
         let resp = self
-            .request(reqwest::Method::GET, &format!("/issue/{issue_key}"), None)
+            .request(reqwest::Method::GET, &path, None)
             .await?
             .ok_or("Empty issue response")?;
 

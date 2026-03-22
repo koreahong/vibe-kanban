@@ -44,8 +44,6 @@ pub struct JiraSearchResult {
     pub priority: String,
     pub assignee: Option<String>,
     pub issuetype: String,
-    pub parent_key: Option<String>,
-    pub parent_summary: Option<String>,
     pub updated: Option<String>,
     pub duedate: Option<String>,
 }
@@ -160,10 +158,6 @@ fn jira_issue_to_search_result(issue: &jira::client::JiraIssue) -> JiraSearchRes
         priority: f.priority.as_ref().map(|p| p.name.clone()).unwrap_or_default(),
         assignee: f.assignee.as_ref().and_then(|a| a.display_name.clone()),
         issuetype: f.issuetype.as_ref().map(|t| t.name.clone()).unwrap_or_default(),
-        parent_key: f.parent.as_ref().map(|p| p.key.clone()),
-        parent_summary: f.parent.as_ref().and_then(|p| {
-            p.fields.as_ref().and_then(|pf| pf.summary.clone())
-        }),
         updated: f.updated.clone(),
         duedate: f.duedate.clone(),
     }
@@ -178,9 +172,12 @@ async fn search(
     let query = params.q.unwrap_or_default();
     let query_upper = query.to_uppercase();
 
+    // Fields needed for search display — no parent/description/subtasks
+    const SEARCH_FIELDS: &[&str] = &["summary", "status", "priority", "assignee", "issuetype", "updated", "duedate"];
+
     // key 패턴이면 get_issue 직접 호출 (100-300ms vs 1-3s)
     if KEY_PATTERN.is_match(&query_upper) {
-        match client.get_issue(&query_upper).await {
+        match client.get_issue(&query_upper, Some(SEARCH_FIELDS)).await {
             Ok(issue) => {
                 let result = jira_issue_to_search_result(&issue);
                 return Ok(Json(JiraSearchResponse { total: 1, issues: vec![result] }));
@@ -194,8 +191,7 @@ async fn search(
     let jql = build_jql(&query, params.issue_type.as_deref(), &cfg.jira_project_key);
     let max = params.max.unwrap_or(10);
 
-    // Only request fields needed for display — skip description/subtasks/issuelinks
-    let search_fields = &["summary", "status", "priority", "assignee", "issuetype", "parent", "updated", "duedate"];
+    let search_fields = SEARCH_FIELDS;
     let response = client
         .search_issues(&jql, Some(search_fields), max)
         .await
@@ -264,9 +260,9 @@ async fn import_issue(
         ErrorResponse::new(StatusCode::BAD_REQUEST, "Invalid project_id UUID")
     })?;
 
-    // Fetch issue from Jira
+    // Fetch issue from Jira (full fields needed for import)
     let jira_issue = client
-        .get_issue(&payload.jira_key)
+        .get_issue(&payload.jira_key, None)
         .await
         .map_err(|e| ErrorResponse::new(StatusCode::BAD_REQUEST, format!("Failed to fetch {}: {e}", payload.jira_key)))?;
 
@@ -321,7 +317,7 @@ async fn import_issue(
             {
                 continue;
             }
-            match client.get_issue(sub_key).await {
+            match client.get_issue(sub_key, None).await {
                 Ok(sub_issue) => {
                     let sub_fields = map_jira_issue_to_vk(&sub_issue, &cfg.user_mappings);
                     let sub_status_id = match resolve_status_id(&statuses, &sub_fields.status) {
@@ -434,7 +430,7 @@ async fn import_epic(
     let client = make_client(&cfg);
 
     let epic = client
-        .get_issue(&payload.epic_key)
+        .get_issue(&payload.epic_key, None)
         .await
         .map_err(|e| ErrorResponse::new(StatusCode::BAD_REQUEST, format!("Failed to fetch Epic {}: {e}", payload.epic_key)))?;
 

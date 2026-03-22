@@ -181,14 +181,6 @@ const JiraImportDialogImpl = create<JiraImportDialogProps>((props) => {
                     </>
                   )}
                 </div>
-                {/* Line 3: epic key · epic title */}
-                {issue.parent_key && (
-                  <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                    {issue.parent_summary
-                      ? `${issue.parent_key} · ${issue.parent_summary}`
-                      : issue.parent_key}
-                  </div>
-                )}
               </div>
               <div className="shrink-0">
                 {imported.has(issue.key) ? (

@@ -1571,12 +1571,10 @@ export interface JiraConfig {
 export interface JiraSearchResult {
   key: string;
   summary: string;
-  parent_summary?: string;
   status: string;
   priority: string;
   assignee: string | null;
   issuetype: string;
-  parent_key: string | null;
   updated: string | null;
   duedate: string | null;
 }

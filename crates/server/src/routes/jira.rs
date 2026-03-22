@@ -179,7 +179,7 @@ async fn import_issue(
     let client = make_client(&cfg);
 
     let jira_issue = client
-        .get_issue(&payload.jira_key)
+        .get_issue(&payload.jira_key, None)
         .await
         .map_err(|e| ApiError::BadRequest(format!("Failed to fetch {}: {e}", payload.jira_key)))?;
 
@@ -200,7 +200,7 @@ async fn import_epic(
     let client = make_client(&cfg);
 
     let epic = client
-        .get_issue(&payload.epic_key)
+        .get_issue(&payload.epic_key, None)
         .await
         .map_err(|e| ApiError::BadRequest(format!("Failed to fetch Epic {}: {e}", payload.epic_key)))?;
 
