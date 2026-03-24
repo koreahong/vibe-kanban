@@ -17,14 +17,17 @@ import {
 
 interface RemoteUserSystemProviderProps {
   children: ReactNode;
+  activeHostId?: string | null;
 }
 
 export function RemoteUserSystemProvider({
   children,
+  activeHostId,
 }: RemoteUserSystemProviderProps) {
   const queryClient = useQueryClient();
   const { isSignedIn, isLoaded } = useAuth();
-  const { hostId } = useParams({ strict: false });
+  const { hostId: routeHostId } = useParams({ strict: false });
+  const hostId = routeHostId ?? activeHostId ?? null;
   const userSystemQueryKey = useMemo(
     () => ["remote-workspace-user-system", hostId] as const,
     [hostId],

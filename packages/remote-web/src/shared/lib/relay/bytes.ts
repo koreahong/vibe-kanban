@@ -26,9 +26,13 @@ export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 export async function sha256Base64(bytes: Uint8Array): Promise<string> {
-  const hashBuffer = await crypto.subtle.digest(
-    "SHA-256",
-    toArrayBuffer(bytes),
-  );
-  return bytesToBase64(new Uint8Array(hashBuffer));
+  if (typeof crypto !== "undefined" && crypto.subtle) {
+    const hashBuffer = await crypto.subtle.digest(
+      "SHA-256",
+      toArrayBuffer(bytes),
+    );
+    return bytesToBase64(new Uint8Array(hashBuffer));
+  }
+  const { sha256 } = await import("@noble/hashes/sha256");
+  return bytesToBase64(sha256(bytes));
 }

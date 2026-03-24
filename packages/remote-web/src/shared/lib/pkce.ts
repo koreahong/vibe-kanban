@@ -1,3 +1,5 @@
+import { sha256 } from "@noble/hashes/sha256";
+
 function base64UrlEncode(array: Uint8Array): string {
   const base64 = btoa(String.fromCharCode(...array));
   return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
@@ -19,8 +21,11 @@ export function generateVerifier(): string {
 
 export async function generateChallenge(verifier: string): Promise<string> {
   const data = new TextEncoder().encode(verifier);
-  const hash = await crypto.subtle.digest("SHA-256", data);
-  return bytesToHex(new Uint8Array(hash));
+  if (typeof crypto !== "undefined" && crypto.subtle) {
+    const hash = await crypto.subtle.digest("SHA-256", data);
+    return bytesToHex(new Uint8Array(hash));
+  }
+  return bytesToHex(sha256(data));
 }
 
 const VERIFIER_KEY = "oauth_verifier";

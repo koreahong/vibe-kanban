@@ -164,7 +164,9 @@ function RootLayout() {
     <AppNavigationProvider value={appNavigation}>
       <UserProvider>
         <RemoteActionsProvider>
-          <RemoteUserSystemProvider>{content}</RemoteUserSystemProvider>
+          <RemoteUserSystemProvider activeHostId={navigationHostId}>
+            {content}
+          </RemoteUserSystemProvider>
         </RemoteActionsProvider>
       </UserProvider>
     </AppNavigationProvider>
