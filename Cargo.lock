@@ -4153,6 +4153,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "jira"
+version = "0.1.30"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "regex",
+ "reqwest 0.13.2",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "jni"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7932,11 +7944,13 @@ dependencies = [
  "git",
  "git-host",
  "http",
+ "jira",
  "local-deployment",
  "mime_guess",
  "os_info",
  "preview-proxy",
  "rand 0.8.5",
+ "regex",
  "relay-client",
  "relay-control",
  "relay-hosts",

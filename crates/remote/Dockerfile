@@ -77,10 +77,12 @@ COPY crates/git-host/Cargo.toml crates/git-host/Cargo.toml
 COPY crates/local-deployment/Cargo.toml crates/local-deployment/Cargo.toml
 COPY crates/deployment/Cargo.toml crates/deployment/Cargo.toml
 COPY crates/review/Cargo.toml crates/review/Cargo.toml
+COPY crates/jira/Cargo.toml crates/jira/Cargo.toml
 COPY crates/api-types crates/api-types
 COPY crates/relay-types crates/relay-types
 COPY crates/remote crates/remote
 COPY crates/utils crates/utils
+COPY crates/jira crates/jira
 COPY assets assets
 
 RUN mkdir -p /app/bin
@@ -98,7 +100,6 @@ RUN if [ -z "${FEATURES}" ]; then \
 RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=cargo-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=remote-target,target=/app/target \
-    --mount=type=ssh \
     cargo build ${FEATURES:+--locked} --release --manifest-path crates/remote/Cargo.toml ${FEATURES:+--features ${FEATURES}} \
  && cp /app/target/release/${APP_NAME} /app/bin/${APP_NAME}
 
