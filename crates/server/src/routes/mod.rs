@@ -6,6 +6,7 @@ use tower_http::{compression::CompressionLayer, validate_request::ValidateReques
 
 use crate::{DeploymentImpl, middleware};
 
+pub mod jira;
 pub mod approvals;
 pub mod config;
 pub mod containers;
@@ -48,6 +49,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(repo::router())
         .merge(events::router(&deployment))
         .merge(approvals::router())
+        .merge(jira::router())
         .merge(scratch::router(&deployment))
         .merge(search::router(&deployment))
         .merge(preview::api_router())

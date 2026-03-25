@@ -62,6 +62,7 @@ import { ViewNavTabs } from '@vibe/ui/components/ViewNavTabs';
 import { IssueListView } from '@vibe/ui/components/IssueListView';
 import { CommandBarDialog } from '@/shared/dialogs/command-bar/CommandBarDialog';
 import { KanbanFiltersDialog } from '@/shared/dialogs/kanban/KanbanFiltersDialog';
+import { JiraImportDialog } from '@/shared/dialogs/kanban/JiraImportDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -809,6 +810,10 @@ export function KanbanContainer() {
     ]
   );
 
+  const handleImportFromJira = useCallback(() => {
+    void JiraImportDialog.show({ projectId });
+  }, [projectId]);
+
   const handleAddTask = useCallback(
     (statusId?: string) => {
       const createPayload = {
@@ -966,6 +971,7 @@ export function KanbanContainer() {
             hideBlocked={hideBlocked}
             onHideBlockedChange={setHideBlocked}
             onClearFilters={clearKanbanFilters}
+            onImportFromJira={handleImportFromJira}
             onCreateIssue={handleAddTask}
             shouldAnimateCreateButton={shouldAnimateCreateButton}
             renderFiltersDialog={(props) => <KanbanFiltersDialog {...props} />}

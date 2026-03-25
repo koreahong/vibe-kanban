@@ -1736,3 +1736,133 @@ export const searchApi = {
     return handleApiResponse<SearchResult[]>(response);
   },
 };
+
+// --- Jira Integration APIs ---
+
+export interface JiraConfig {
+  jira_base_url: string;
+  jira_email: string;
+  jira_api_token: string;
+  jira_project_key: string;
+  organization_id: string;
+  user_mappings: Array<{ vk_user_id: string; jira_account_id: string }>;
+}
+
+export interface JiraSearchResult {
+  key: string;
+  summary: string;
+  status: string;
+  priority: string;
+  assignee: string | null;
+  issuetype: string;
+  updated: string | null;
+  duedate: string | null;
+}
+
+export interface JiraSearchResponse {
+  total: number;
+  issues: JiraSearchResult[];
+}
+
+export interface JiraImportResponse {
+  jira_key: string;
+  title: string;
+  status: string;
+  priority: string;
+}
+
+export interface JiraImportEpicResponse {
+  project_name: string;
+  issues_imported: number;
+  issues: Array<{ jira_key: string; title: string }>;
+  errors: string[];
+}
+
+export interface JiraPushResponse {
+  jira_key: string;
+  jira_url: string;
+}
+
+// Jira backend returns raw JSON (not wrapped in { success, data }),
+// so we parse directly instead of using handleApiResponse.
+const handleJiraResponse = async <T>(response: Response): Promise<T> => {
+  if (!response.ok) {
+    let errorMessage = `Request failed with status ${response.status}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.error || errorData.message || errorMessage;
+    } catch {
+      errorMessage = response.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
+  return response.json() as Promise<T>;
+};
+
+export const jiraApi = {
+  getConfig: async (): Promise<JiraConfig | null> => {
+    const response = await makeRequest('/api/remote/jira/config');
+    return handleJiraResponse<JiraConfig | null>(response);
+  },
+
+  updateConfig: async (config: JiraConfig): Promise<JiraConfig> => {
+    const response = await makeRequest('/api/remote/jira/config', {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    });
+    return handleJiraResponse<JiraConfig>(response);
+  },
+
+  search: async (
+    query: string,
+    issueType?: string,
+    max?: number
+  ): Promise<JiraSearchResponse> => {
+    const params = new URLSearchParams({ q: query });
+    if (issueType) params.set('type', issueType);
+    if (max) params.set('max', String(max));
+    const response = await makeRequest(`/api/remote/jira/search?${params.toString()}`);
+    return handleJiraResponse<JiraSearchResponse>(response);
+  },
+
+  importIssue: async (
+    jiraKey: string,
+    projectId: string
+  ): Promise<JiraImportResponse> => {
+    const response = await makeRemoteRequest('/api/remote/jira/import', {
+      method: 'POST',
+      body: JSON.stringify({ jira_key: jiraKey, project_id: projectId }),
+    });
+    return handleJiraResponse<JiraImportResponse>(response);
+  },
+
+  importEpic: async (
+    epicKey: string,
+    organizationId: string,
+    includeIssues?: boolean
+  ): Promise<JiraImportEpicResponse> => {
+    const response = await makeRequest('/api/remote/jira/import-epic', {
+      method: 'POST',
+      body: JSON.stringify({
+        epic_key: epicKey,
+        organization_id: organizationId,
+        include_issues: includeIssues ?? true,
+      }),
+    });
+    return handleJiraResponse<JiraImportEpicResponse>(response);
+  },
+
+  pushToJira: async (
+    issueId: string,
+    projectKey?: string
+  ): Promise<JiraPushResponse> => {
+    const response = await makeRequest('/api/remote/jira/push', {
+      method: 'POST',
+      body: JSON.stringify({
+        issue_id: issueId,
+        project_key: projectKey,
+      }),
+    });
+    return handleJiraResponse<JiraPushResponse>(response);
+  },
+};

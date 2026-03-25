@@ -25,6 +25,7 @@ mod billing {
         Router::new()
     }
 }
+mod jira;
 pub mod attachments;
 pub(crate) mod electric_proxy;
 pub(crate) mod error;
@@ -146,6 +147,7 @@ pub fn router(state: AppState) -> Router {
     Router::<AppState>::new()
         .nest("/v1", v1_public)
         .nest("/v1", v1_protected)
+        .nest("/api/remote", jira::router())
         .fallback_service(spa)
         .layer(CompressionLayer::new())
         .layer(middleware::from_fn(
