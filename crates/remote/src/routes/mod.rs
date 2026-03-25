@@ -26,6 +26,7 @@ mod billing {
     }
 }
 mod jira;
+pub(super) mod jira_hooks; // QRAFT-CUSTOM
 pub mod attachments;
 pub(crate) mod electric_proxy;
 pub(crate) mod error;

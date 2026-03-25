@@ -15,6 +15,18 @@ pub struct JiraConfig {
     pub organization_id: String,
     #[serde(default)]
     pub user_mappings: Vec<UserMapping>,
+
+    // QRAFT-CUSTOM START — Jira import customizations
+    /// true: import 시 simple_id를 Jira key(e.g. MPD-179)로 설정
+    #[serde(default)]
+    pub preserve_jira_key: bool,
+    /// true: 같은 jira_key 재import 차단
+    #[serde(default)]
+    pub prevent_duplicates: bool,
+    /// Jira status → VK project status name 직접 매핑 (e.g. {"미해결": "To do"})
+    #[serde(default)]
+    pub status_mappings: std::collections::HashMap<String, String>,
+    // QRAFT-CUSTOM END
 }
 
 fn default_project_key() -> String {

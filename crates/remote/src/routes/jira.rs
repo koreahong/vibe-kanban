@@ -1,4 +1,4 @@
-use api_types::{IssuePriority, IssueRelationshipType};
+use api_types::IssuePriority;
 use axum::{
     Json, Router,
     extract::{Query, State},
@@ -10,7 +10,7 @@ use jira::{
     adf::adf_to_markdown,
     client::JiraClient,
     config::{self, JiraConfig},
-    mapper::{map_jira_issue_to_vk, map_jira_link_type_to_vk, map_vk_issue_to_jira_fields},
+    mapper::{map_jira_issue_to_vk, map_vk_issue_to_jira_fields},
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -19,7 +19,6 @@ use crate::{
     AppState,
     db::{
         issue_comments::IssueCommentRepository,
-        issue_relationships::IssueRelationshipRepository,
         issues::IssueRepository,
         project_statuses::ProjectStatusRepository,
     },
@@ -212,7 +211,7 @@ fn map_priority(priority_str: &str) -> Option<IssuePriority> {
         "urgent" => Some(IssuePriority::Urgent),
         "high" => Some(IssuePriority::High),
         "low" => Some(IssuePriority::Low),
-        "lowest" => Some(IssuePriority::Lowest),
+        "lowest" => Some(IssuePriority::Low),
         _ => Some(IssuePriority::Medium),
     }
 }
@@ -273,14 +272,23 @@ async fn import_issue(
         .await
         .map_err(|e| ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to load statuses: {e}")))?;
 
-    let status_id = resolve_status_id(&statuses, &vk_fields.status)
-        .ok_or_else(|| ErrorResponse::new(StatusCode::BAD_REQUEST, "Project has no statuses"))?;
+    // QRAFT-CUSTOM: config status mapping + candidates-first iteration order fix
+    let jira_status_name = jira_issue.fields.status.as_ref().map(|s| s.name.as_str());
+    let status_id = super::jira_hooks::resolve_status_with_config(
+        &statuses, &vk_fields.status, jira_status_name, &cfg.status_mappings,
+    )
+    .ok_or_else(|| ErrorResponse::new(StatusCode::BAD_REQUEST, "Project has no statuses"))?;
 
     let description = if vk_fields.description.is_empty() {
         None
     } else {
         Some(vk_fields.description)
     };
+
+    // QRAFT-CUSTOM: duplicate prevention
+    super::jira_hooks::check_duplicate(state.pool(), project_id, &payload.jira_key, cfg.prevent_duplicates)
+        .await
+        .map_err(|e| ErrorResponse::new(StatusCode::CONFLICT, e))?;
 
     // Create main issue in DB
     let response = IssueRepository::create(
@@ -291,12 +299,10 @@ async fn import_issue(
         vk_fields.title.clone(),
         description,
         map_priority(&vk_fields.priority),
-        Some(vk_fields.simple_id.clone()),
-        vk_fields.issue_number,
         None, None, None,
         0.0,
         None, None,
-        serde_json::json!({}),
+        super::jira_hooks::build_extension_metadata(&payload.jira_key), // QRAFT-CUSTOM
         creator_user_id,
     )
     .await
@@ -304,23 +310,22 @@ async fn import_issue(
 
     let issue_id = response.data.id;
 
+    // QRAFT-CUSTOM: preserve Jira key as simple_id (overrides DB trigger auto-generated EDA-X)
+    super::jira_hooks::override_simple_id(state.pool(), issue_id, &payload.jira_key, cfg.preserve_jira_key)
+        .await
+        .map_err(|e| ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
     // --- 3-A: Import sub-issues ---
     if let Some(subtasks) = &jira_issue.fields.subtasks {
         for subtask_ref in subtasks {
             let sub_key = &subtask_ref.key;
-            // Skip if already imported into this project
-            if IssueRepository::find_by_simple_id_in_project(state.pool(), sub_key, project_id)
-                .await
-                .ok()
-                .flatten()
-                .is_some()
-            {
-                continue;
-            }
+            // (duplicate check skipped - simple_id lookup not available)
             match client.get_issue(sub_key, None).await {
                 Ok(sub_issue) => {
                     let sub_fields = map_jira_issue_to_vk(&sub_issue, &cfg.user_mappings);
-                    let sub_status_id = match resolve_status_id(&statuses, &sub_fields.status) {
+                    // QRAFT-CUSTOM: use config-aware status resolution for sub-issues
+                    let sub_jira_status_name = sub_issue.fields.status.as_ref().map(|s| s.name.as_str());
+                    let sub_status_id = match super::jira_hooks::resolve_status_with_config(&statuses, &sub_fields.status, sub_jira_status_name, &cfg.status_mappings) {
                         Some(id) => id,
                         None => continue,
                     };
@@ -329,7 +334,11 @@ async fn import_issue(
                     } else {
                         Some(sub_fields.description)
                     };
-                    let _ = IssueRepository::create(
+                    // QRAFT-CUSTOM: duplicate check for sub-issue
+                    if super::jira_hooks::check_duplicate(state.pool(), project_id, sub_key, cfg.prevent_duplicates).await.is_err() {
+                        continue;
+                    }
+                    let sub_result = IssueRepository::create(
                         state.pool(),
                         None,
                         project_id,
@@ -337,60 +346,24 @@ async fn import_issue(
                         sub_fields.title,
                         sub_desc,
                         map_priority(&sub_fields.priority),
-                        Some(sub_fields.simple_id),
-                        sub_fields.issue_number,
                         None, None, None,
                         0.0,
                         Some(issue_id), None,
-                        serde_json::json!({}),
+                        super::jira_hooks::build_extension_metadata(sub_key), // QRAFT-CUSTOM
                         creator_user_id,
                     )
                     .await;
+                    // QRAFT-CUSTOM: preserve sub-issue Jira key as simple_id
+                    if let Ok(sub_response) = sub_result {
+                        let _ = super::jira_hooks::override_simple_id(state.pool(), sub_response.data.id, sub_key, cfg.preserve_jira_key).await;
+                    }
                 }
                 Err(_) => {} // skip fetch failures
             }
         }
     }
 
-    // --- 3-B: Import issue relationships ---
-    if let Some(issuelinks) = &jira_issue.fields.issuelinks {
-        for link in issuelinks {
-            let link_type_name = link
-                .link_type
-                .as_ref()
-                .map(|lt| lt.name.as_str())
-                .unwrap_or("Relates");
-            let rel_type_str = map_jira_link_type_to_vk(link_type_name);
-            let rel_type = match rel_type_str {
-                "blocking" => IssueRelationshipType::Blocking,
-                "has_duplicate" => IssueRelationshipType::HasDuplicate,
-                _ => IssueRelationshipType::Related,
-            };
-
-            // Try inward or outward issue
-            let related_key = link
-                .inward_issue
-                .as_ref()
-                .map(|i| i.key.as_str())
-                .or_else(|| link.outward_issue.as_ref().map(|i| i.key.as_str()));
-
-            if let Some(key) = related_key {
-                if let Ok(Some(related)) =
-                    IssueRepository::find_by_simple_id_in_project(state.pool(), key, project_id).await
-                {
-                    let _ = IssueRelationshipRepository::create(
-                        state.pool(),
-                        None,
-                        issue_id,
-                        related.id,
-                        rel_type,
-                    )
-                    .await;
-                }
-                // Skip if related issue not yet in VK
-            }
-        }
-    }
+    // --- 3-B: Issue relationships skipped (requires find_by_simple_id lookup) ---
 
     // --- 3-C: Import comments ---
     if let Ok(comments) = client.get_issue_comments(&payload.jira_key).await {
