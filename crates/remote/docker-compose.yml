@@ -144,6 +144,8 @@ services:
       AZURE_STORAGE_ENDPOINT_URL:
       AZURE_STORAGE_PUBLIC_ENDPOINT_URL:
 
+    volumes:
+      - /Users/masterhong/.vibe-kanban:/home/appuser/.vibe-kanban:ro
     ports:
       - "${REMOTE_SERVER_PORTS:-127.0.0.1:3000:8081}"
     restart: unless-stopped

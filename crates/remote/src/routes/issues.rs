@@ -408,6 +408,10 @@ async fn update_issue(
             let cfg_mappings = jira::config::load_config()
                 .map(|c| c.status_mappings)
                 .unwrap_or_default();
+            // QRAFT-CUSTOM: only sync for In progress, Done, Cancelled
+            if !matches!(new_status_name.to_lowercase().as_str(), "to do" | "in progress" | "done" | "cancelled") {
+                return;
+            }
             super::jira_hooks::sync_status_to_jira(&ext_meta, &new_status_name, &cfg_mappings).await;
         });
     }
@@ -592,6 +596,29 @@ async fn bulk_update_issues(
     for (old_issue, new_issue) in &notification_pairs {
         notify_issue_update_changes(&state, organization_id, ctx.user.id, old_issue, new_issue)
             .await;
+    }
+
+    // QRAFT-CUSTOM: sync status change to Jira (fire-and-forget) — bulk path
+    for (old_issue, new_issue) in &notification_pairs {
+        if old_issue.status_id != new_issue.status_id {
+            let ext_meta = new_issue.extension_metadata.clone();
+            let new_status_id = new_issue.status_id;
+            let pool = state.pool().clone();
+            tokio::spawn(async move {
+                let new_status_name = match crate::db::project_statuses::ProjectStatusRepository::find_by_id(&pool, new_status_id).await {
+                    Ok(Some(s)) => s.name,
+                    _ => return,
+                };
+                let cfg_mappings = jira::config::load_config()
+                    .map(|c| c.status_mappings)
+                    .unwrap_or_default();
+                // QRAFT-CUSTOM: only sync for In progress, Done, Cancelled
+                if !matches!(new_status_name.to_lowercase().as_str(), "to do" | "in progress" | "done" | "cancelled") {
+                    return;
+                }
+                super::jira_hooks::sync_status_to_jira(&ext_meta, &new_status_name, &cfg_mappings).await;
+            });
+        }
     }
 
     Ok(Json(BulkUpdateIssuesResponse {
