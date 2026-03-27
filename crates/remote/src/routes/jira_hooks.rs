@@ -97,3 +97,66 @@ pub fn resolve_status_with_config(
         .or_else(|| statuses.first())
         .map(|s| s.id)
 }
+
+// QRAFT-CUSTOM: Jira status sync on card move
+
+/// VK project status name → Jira status name.
+/// config_mappings is Jira→VK direction, so we reverse-lookup first.
+fn resolve_jira_target_status(vk_status_name: &str, config_mappings: &HashMap<String, String>) -> String {
+    // 1. config reverse lookup (VK name → Jira name)
+    for (jira_name, vk_name) in config_mappings {
+        if vk_name.eq_ignore_ascii_case(vk_status_name) {
+            return jira_name.clone();
+        }
+    }
+    // 2. default mapping by VK status name pattern
+    let lower = vk_status_name.to_lowercase();
+    if lower.contains("done") {
+        "해결됨".to_string()
+    } else if lower.contains("review") || lower.contains("progress") {
+        "진행 중".to_string()
+    } else if lower.contains("cancel") {
+        "취소".to_string()
+    } else if lower.contains("hold") {
+        "PUT ON HOLD".to_string()
+    } else {
+        "미해결".to_string()
+    }
+}
+
+/// Sync VK issue status change back to Jira via transition.
+/// Only acts on issues with extension_metadata.jira_key set (i.e., Jira-imported issues).
+/// Silently no-ops if Jira is not configured or jira_key is absent.
+pub async fn sync_status_to_jira(
+    extension_metadata: &serde_json::Value,
+    new_status_name: &str,
+    config_mappings: &HashMap<String, String>,
+) {
+    // 1. Extract jira_key from extension_metadata
+    let jira_key = match extension_metadata.get("jira_key").and_then(|v| v.as_str()) {
+        Some(k) => k.to_string(),
+        None => return,
+    };
+
+    // 2. Load Jira config
+    let cfg = match jira::config::load_config() {
+        Some(c) => c,
+        None => return,
+    };
+
+    // 3. Resolve target Jira status name
+    let target_status = resolve_jira_target_status(new_status_name, config_mappings);
+
+    // 4. Execute transition
+    let client = jira::client::JiraClient::new(&cfg.jira_base_url, &cfg.jira_email, &cfg.jira_api_token);
+    if let Err(e) = client.transition_to_status(&jira_key, &target_status).await {
+        tracing::warn!(
+            jira_key = %jira_key,
+            target_status = %target_status,
+            error = %e,
+            "Jira status sync failed (non-fatal)"
+        );
+    } else {
+        tracing::info!(jira_key = %jira_key, target_status = %target_status, "Jira status synced");
+    }
+}

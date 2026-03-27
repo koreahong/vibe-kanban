@@ -395,6 +395,23 @@ async fn update_issue(
 
     notify_issue_update_changes(&state, organization_id, ctx.user.id, &issue, &data).await;
 
+    // QRAFT-CUSTOM: sync status change to Jira (fire-and-forget)
+    if issue.status_id != data.status_id {
+        let ext_meta = data.extension_metadata.clone();
+        let new_status_id = data.status_id;
+        let pool = state.pool().clone();
+        tokio::spawn(async move {
+            let new_status_name = match crate::db::project_statuses::ProjectStatusRepository::find_by_id(&pool, new_status_id).await {
+                Ok(Some(s)) => s.name,
+                _ => return,
+            };
+            let cfg_mappings = jira::config::load_config()
+                .map(|c| c.status_mappings)
+                .unwrap_or_default();
+            super::jira_hooks::sync_status_to_jira(&ext_meta, &new_status_name, &cfg_mappings).await;
+        });
+    }
+
     Ok(Json(MutationResponse { data, txid }))
 }
 
