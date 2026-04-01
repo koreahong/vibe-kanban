@@ -22,6 +22,7 @@ import {
 } from './SettingsComponents';
 import { useSettingsDirty } from './SettingsDirtyContext';
 import { useSettingsMachineClient } from './SettingsHostContext';
+import { McpTogglePanel } from './McpTogglePanel'; // QRAFT-CUSTOM
 
 export function McpSettingsSection() {
   const { t } = useTranslation('settings');
@@ -316,6 +317,12 @@ export function McpSettingsSection() {
           </div>
         ) : (
           <>
+            {/* QRAFT-CUSTOM: toggle panel */}
+            <McpTogglePanel
+              mcpServers={mcpServers}
+              onChange={handleMcpServersChange}
+            />
+
             <SettingsField
               label={t('settings.mcp.labels.serverConfig')}
               description={
