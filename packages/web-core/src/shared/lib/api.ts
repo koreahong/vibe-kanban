@@ -396,6 +396,14 @@ export const sessionsApi = {
     });
     return handleApiResponse<Session>(response);
   },
+
+  // QRAFT-CUSTOM: soft-delete session
+  delete: async (sessionId: string): Promise<void> => {
+    const response = await makeRequest(`/api/sessions/${sessionId}`, {
+      method: 'DELETE',
+    });
+    await handleApiResponse<void>(response);
+  },
 };
 
 // Workspace APIs

@@ -1,3 +1,4 @@
+pub mod delete; // QRAFT-CUSTOM
 pub mod queue;
 pub mod review;
 
@@ -313,7 +314,7 @@ pub async fn run_setup_script(
 
 pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
     let session_id_router = Router::new()
-        .route("/", get(get_session).put(update_session))
+        .route("/", get(get_session).put(update_session).delete(delete::delete_session)) // QRAFT-CUSTOM
         .route("/follow-up", post(follow_up))
         .route("/reset", post(reset_process))
         .route("/setup", post(run_setup_script))

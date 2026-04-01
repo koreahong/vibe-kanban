@@ -28,6 +28,7 @@ pub struct Session {
     pub agent_working_dir: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>, // QRAFT-CUSTOM: soft-delete
 }
 
 #[derive(Debug, Deserialize, TS)]
@@ -46,9 +47,10 @@ impl Session {
                       executor,
                       agent_working_dir,
                       created_at AS "created_at!: DateTime<Utc>",
-                      updated_at AS "updated_at!: DateTime<Utc>"
+                      updated_at AS "updated_at!: DateTime<Utc>",
+                      deleted_at AS "deleted_at?: DateTime<Utc>"
                FROM sessions
-               WHERE id = $1"#,
+               WHERE id = $1 AND deleted_at IS NULL"#,
             id
         )
         .fetch_optional(pool)
@@ -70,7 +72,8 @@ impl Session {
                       s.executor,
                       s.agent_working_dir,
                       s.created_at AS "created_at!: DateTime<Utc>",
-                      s.updated_at AS "updated_at!: DateTime<Utc>"
+                      s.updated_at AS "updated_at!: DateTime<Utc>",
+                      s.deleted_at AS "deleted_at?: DateTime<Utc>"
                FROM sessions s
                LEFT JOIN (
                    SELECT ep.session_id, MAX(ep.created_at) as last_used
@@ -78,7 +81,7 @@ impl Session {
                    WHERE ep.run_reason != 'devserver' AND ep.dropped = FALSE
                    GROUP BY ep.session_id
                ) latest_ep ON s.id = latest_ep.session_id
-               WHERE s.workspace_id = $1
+               WHERE s.workspace_id = $1 AND s.deleted_at IS NULL
                ORDER BY COALESCE(latest_ep.last_used, s.created_at) DESC"#,
             workspace_id
         )
@@ -101,7 +104,8 @@ impl Session {
                       s.executor,
                       s.agent_working_dir,
                       s.created_at AS "created_at!: DateTime<Utc>",
-                      s.updated_at AS "updated_at!: DateTime<Utc>"
+                      s.updated_at AS "updated_at!: DateTime<Utc>",
+                      s.deleted_at AS "deleted_at?: DateTime<Utc>"
                FROM sessions s
                LEFT JOIN (
                    SELECT ep.session_id, MAX(ep.created_at) as last_used
@@ -109,7 +113,7 @@ impl Session {
                    WHERE ep.run_reason != 'devserver' AND ep.dropped = FALSE
                    GROUP BY ep.session_id
                ) latest_ep ON s.id = latest_ep.session_id
-               WHERE s.workspace_id = $1
+               WHERE s.workspace_id = $1 AND s.deleted_at IS NULL
                ORDER BY COALESCE(latest_ep.last_used, s.created_at) DESC
                LIMIT 1"#,
             workspace_id
@@ -131,9 +135,10 @@ impl Session {
                       executor,
                       agent_working_dir,
                       created_at,
-                      updated_at
+                      updated_at,
+                      deleted_at
                FROM sessions
-               WHERE workspace_id = ?
+               WHERE workspace_id = ? AND deleted_at IS NULL
                ORDER BY created_at ASC, id ASC
                LIMIT 1"#,
         )
@@ -161,7 +166,8 @@ impl Session {
                          executor,
                          agent_working_dir,
                          created_at AS "created_at!: DateTime<Utc>",
-                         updated_at AS "updated_at!: DateTime<Utc>""#,
+                         updated_at AS "updated_at!: DateTime<Utc>",
+                         deleted_at AS "deleted_at?: DateTime<Utc>""#,
             id,
             workspace_id,
             name,
@@ -220,6 +226,17 @@ impl Session {
         sqlx::query!(
             r#"UPDATE sessions SET executor = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2"#,
             executor,
+            id
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    // QRAFT-CUSTOM: soft-delete support
+    pub async fn soft_delete(pool: &SqlitePool, id: Uuid) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            r#"UPDATE sessions SET deleted_at = datetime('now', 'subsec') WHERE id = $1"#,
             id
         )
         .execute(pool)

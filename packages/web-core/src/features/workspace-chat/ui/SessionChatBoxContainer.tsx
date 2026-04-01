@@ -184,6 +184,18 @@ export function SessionChatBoxContainer(props: SessionChatBoxContainerProps) {
     },
     [queryClient, workspaceId]
   );
+  // QRAFT-CUSTOM: soft-delete session
+  const handleDeleteSession = useCallback(
+    async (targetSessionId: string) => {
+      if (!window.confirm('Delete this session? This cannot be undone.')) return;
+      await sessionsApi.delete(targetSessionId);
+      void queryClient.invalidateQueries({
+        queryKey: ['workspaceSessions', workspaceId],
+      });
+    },
+    [queryClient, workspaceId]
+  );
+
   const appNavigation = useAppNavigation();
 
   const { executeAction } = useActions();
@@ -1040,6 +1052,7 @@ export function SessionChatBoxContainer(props: SessionChatBoxContainerProps) {
         isNewSessionMode: needsExecutorSelection,
         onNewSession: onStartNewSession,
         onRenameSession: handleRenameSession,
+        onDeleteSession: handleDeleteSession, // QRAFT-CUSTOM
       }}
       toolbarActions={{
         items: toolbarActionItems,

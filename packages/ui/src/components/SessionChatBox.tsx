@@ -71,6 +71,7 @@ interface SessionProps<TExecutor extends string = string> {
   isNewSessionMode?: boolean;
   onNewSession?: () => void;
   onRenameSession?: (sessionId: string, currentName: string) => void;
+  onDeleteSession?: (sessionId: string) => void; // QRAFT-CUSTOM
 }
 
 export interface SessionToolbarActionItem {
@@ -359,6 +360,7 @@ export function SessionChatBox<TExecutor extends string = string>({
     isNewSessionMode,
     onNewSession,
     onRenameSession,
+    onDeleteSession, // QRAFT-CUSTOM
   } = session;
   const isLatestSelected =
     sessions.length > 0 && selectedSessionId === sessions[0].id;
@@ -875,6 +877,19 @@ export function SessionChatBox<TExecutor extends string = string>({
                   }
                 >
                   {t('conversation.sessions.rename')}
+                </DropdownMenuItem>
+              </>
+            )}
+            {/* QRAFT-CUSTOM: delete session */}
+            {onDeleteSession && selectedSessionId && !isNewSessionMode && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  icon={TrashIcon}
+                  onClick={() => onDeleteSession(selectedSessionId)}
+                  className="text-red-500 hover:text-red-600"
+                >
+                  Delete session
                 </DropdownMenuItem>
               </>
             )}
