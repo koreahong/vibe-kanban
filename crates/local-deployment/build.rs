@@ -16,4 +16,10 @@ fn main() {
     if let Ok(val) = std::env::var("VK_SHARED_API_BASE") {
         println!("cargo:rustc-env=VK_SHARED_API_BASE={}", val);
     }
+
+    // Pass VK_SHARED_RELAY_API_BASE to the compiler so option_env!() sees it
+    println!("cargo:rerun-if-env-changed=VK_SHARED_RELAY_API_BASE");
+    if let Ok(val) = std::env::var("VK_SHARED_RELAY_API_BASE") {
+        println!("cargo:rustc-env=VK_SHARED_RELAY_API_BASE={}", val);
+    }
 }
