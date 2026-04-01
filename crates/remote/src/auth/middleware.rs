@@ -65,7 +65,7 @@ pub(crate) async fn require_session(
     db::TX_CONTEXT.scope(Some(tx_ctx), next.run(req)).await
 }
 
-pub(super) async fn request_context_from_access_token(
+pub(crate) async fn request_context_from_access_token(
     state: &AppState,
     access_token: &str,
 ) -> Result<RequestContext, Response> {
