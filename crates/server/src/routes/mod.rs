@@ -7,6 +7,7 @@ use tower_http::{compression::CompressionLayer, validate_request::ValidateReques
 use crate::{DeploymentImpl, middleware};
 
 pub mod jira;
+pub mod project_mcp; // QRAFT-CUSTOM
 pub mod approvals;
 pub mod config;
 pub mod containers;
@@ -50,6 +51,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(events::router(&deployment))
         .merge(approvals::router())
         .merge(jira::router())
+        .merge(project_mcp::router()) // QRAFT-CUSTOM
         .merge(scratch::router(&deployment))
         .merge(search::router(&deployment))
         .merge(preview::api_router())

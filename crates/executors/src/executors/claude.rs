@@ -635,6 +635,9 @@ impl ClaudeCode {
             .with_profile(&self.cmd)
             .apply_to_command(&mut command);
 
+        // QRAFT-CUSTOM: Prevent nested Claude Code session detection when spawned from Claude Code CLI
+        command.env_remove("CLAUDECODE");
+
         // Remove ANTHROPIC_API_KEY if disable_api_key is enabled
         if self.disable_api_key.unwrap_or(false) {
             command.env_remove("ANTHROPIC_API_KEY");

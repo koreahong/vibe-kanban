@@ -11,7 +11,7 @@ echo "🔍 [Gate 1] Checking required env vars..."
 # Self-hosted environment overrides
 export VK_SHARED_API_BASE="http://10.8.97.88:3000"
 export VITE_VK_SHARED_API_BASE="http://10.8.97.88:3000"
-export VK_SHARED_RELAY_API_BASE="https://10.8.97.88"
+export VK_SHARED_RELAY_API_BASE="http://10.8.97.88:8082"
 
 # Extract all option_env!() vars used in crates and verify they're all exported
 MISSING=0

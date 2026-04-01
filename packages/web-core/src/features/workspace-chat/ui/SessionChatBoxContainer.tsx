@@ -9,6 +9,7 @@ import {
   ExecutionProcessStatus,
 } from 'shared/types';
 import { AgentIcon } from '@/shared/components/AgentIcon';
+import { McpSessionToggle } from '@/shared/components/mcp/McpSessionToggle'; // QRAFT-CUSTOM
 import { useWorkspaceExecution } from '@/shared/hooks/useWorkspaceExecution';
 import { useWorkspaceRepo } from '@/shared/hooks/useWorkspaceRepo';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
@@ -1057,6 +1058,9 @@ export function SessionChatBoxContainer(props: SessionChatBoxContainerProps) {
       toolbarActions={{
         items: toolbarActionItems,
       }}
+      customFooterActions={/* QRAFT-CUSTOM */
+        workspaceId ? <McpSessionToggle workspaceId={workspaceId} executor={effectiveExecutor} /> : undefined
+      }
       onPrCommentClick={
         actionCtx.hasOpenPR ? handleInsertPrComments : undefined
       }

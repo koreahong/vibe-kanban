@@ -194,6 +194,7 @@ interface SessionChatBoxProps<TExecutor extends string = string> {
   tokenUsageInfo?: ContextUsageInfo | null;
   supportsContextUsage?: boolean;
   dropzone?: DropzoneProps;
+  customFooterActions?: ReactNode; // QRAFT-CUSTOM
 }
 
 function defaultExecutorLabel(executor: string) {
@@ -256,6 +257,7 @@ export function SessionChatBox<TExecutor extends string = string>({
   tokenUsageInfo,
   supportsContextUsage,
   dropzone,
+  customFooterActions, // QRAFT-CUSTOM
 }: SessionChatBoxProps<TExecutor>) {
   const { t } = useTranslation('tasks');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -931,6 +933,7 @@ export function SessionChatBox<TExecutor extends string = string>({
               disabled={isDisabled || isRunning || Boolean(item.disabled)}
             />
           ))}
+          {customFooterActions /* QRAFT-CUSTOM */}
         </>
       }
       footerRight={renderActionButtons()}
