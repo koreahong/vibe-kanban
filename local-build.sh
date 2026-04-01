@@ -43,8 +43,8 @@ echo "🔍 Detected platform: $PLATFORM"
 echo "🔧 Using target directory: $CARGO_TARGET_DIR"
 
 # Set API base URL for remote features
-export VK_SHARED_API_BASE="https://api.vibekanban.com"
-export VITE_VK_SHARED_API_BASE="https://api.vibekanban.com"
+export VK_SHARED_API_BASE="${VK_SHARED_API_BASE:-https://api.vibekanban.com}"  # QRAFT-CUSTOM: allow override
+export VITE_VK_SHARED_API_BASE="${VITE_VK_SHARED_API_BASE:-https://api.vibekanban.com}"  # QRAFT-CUSTOM: allow override
 
 echo "🧹 Cleaning previous builds..."
 rm -rf npx-cli/dist
