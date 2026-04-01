@@ -11,6 +11,7 @@ use axum::{
     routing::get,
 };
 use db::models::workspace::Workspace;
+use db::models::workspace_repo::WorkspaceRepo;
 use executors::mcp_config::{McpConfig, read_agent_config, write_agent_config};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -55,7 +56,17 @@ async fn get_project_mcp(
         .ok_or_else(|| ApiError::BadRequest("Workspace not found".to_string()))?;
 
     let container_ref = workspace.container_ref.unwrap_or_default();
-    let mcp_path = std::path::PathBuf::from(&container_ref).join(".mcp.json");
+    let base_dir = std::path::PathBuf::from(&container_ref);
+
+    // Look for .mcp.json in repo subdirectory (container_ref/<repo_name>/.mcp.json)
+    let mcp_path = match WorkspaceRepo::find_repos_for_workspace(pool, query.workspace_id).await {
+        Ok(repos) if repos.len() == 1 => {
+            let repo_dir = base_dir.join(&repos[0].name);
+            let repo_mcp = repo_dir.join(".mcp.json");
+            if repo_mcp.exists() { repo_mcp } else { base_dir.join(".mcp.json") }
+        }
+        _ => base_dir.join(".mcp.json"),
+    };
 
     if !mcp_path.exists() {
         return Ok(ResponseJson(ProjectMcpResponse {
@@ -91,7 +102,17 @@ async fn update_project_mcp(
         .ok_or_else(|| ApiError::BadRequest("Workspace not found".to_string()))?;
 
     let container_ref = workspace.container_ref.unwrap_or_default();
-    let mcp_path = std::path::PathBuf::from(&container_ref).join(".mcp.json");
+    let base_dir = std::path::PathBuf::from(&container_ref);
+
+    // Look for .mcp.json in repo subdirectory (container_ref/<repo_name>/.mcp.json)
+    let mcp_path = match WorkspaceRepo::find_repos_for_workspace(pool, query.workspace_id).await {
+        Ok(repos) if repos.len() == 1 => {
+            let repo_dir = base_dir.join(&repos[0].name);
+            let repo_mcp = repo_dir.join(".mcp.json");
+            if repo_mcp.exists() { repo_mcp } else { base_dir.join(".mcp.json") }
+        }
+        _ => base_dir.join(".mcp.json"),
+    };
 
     if let Some(parent) = mcp_path.parent() {
         fs::create_dir_all(parent)
