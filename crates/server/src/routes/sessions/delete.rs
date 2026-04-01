@@ -4,6 +4,7 @@ use db::models::session::{Session, SessionError};
 use utils::response::ApiResponse;
 
 use crate::error::ApiError;
+use deployment::Deployment;
 use crate::DeploymentImpl;
 use axum::extract::State;
 
