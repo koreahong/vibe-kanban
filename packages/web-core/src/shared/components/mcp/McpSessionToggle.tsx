@@ -1,16 +1,13 @@
 // QRAFT-CUSTOM: Session-level MCP toggle button
-// Shows user-level (~/.claude.json) and project-level (.mcp.json) MCP servers
-// as a popover in the session chatbox toolbar. Writes enabled/disabled back to
-// the appropriate config files; Claude Code CLI handles the rest (loading, session reset).
+// Uses direct API calls (makeLocalApiRequest) instead of useSettingsMachineClient
+// to avoid SettingsHostProvider dependency (SessionChatBox is outside that provider).
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PlugIcon, ToggleLeft, ToggleRight } from '@phosphor-icons/react';
 import type { BaseCodingAgent } from 'shared/types';
 import { cn } from '@/shared/lib/utils';
+import { makeLocalApiRequest } from '@/shared/lib/localApiTransport';
 import { fetchProjectMcpServers, updateProjectMcpServers } from '@/shared/lib/projectMcpApi';
-import { useSettingsMachineClient } from '@/shared/dialogs/settings/settings/SettingsHostContext';
-import { McpConfigStrategyGeneral } from '@/shared/lib/mcpStrategies';
-import { useUserSystem } from '@/shared/hooks/useUserSystem';
 
 interface ServerEntry {
   key: string;
@@ -23,16 +20,37 @@ interface McpSessionToggleProps {
   executor: BaseCodingAgent | null | undefined;
 }
 
+// Load user-level MCP servers via direct API call
+async function loadUserMcpServers(executor: string) {
+  const res = await makeLocalApiRequest(
+    `/api/mcp-config?executor=${encodeURIComponent(executor)}`
+  );
+  if (!res.ok) throw new Error(`Failed to load MCP config: ${res.status}`);
+  return res.json();
+}
+
+// Save user-level MCP servers via direct API call
+async function saveUserMcpServers(executor: string, servers: Record<string, unknown>) {
+  const res = await makeLocalApiRequest(
+    `/api/mcp-config?executor=${encodeURIComponent(executor)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ servers }),
+    }
+  );
+  if (!res.ok) throw new Error(`Failed to save MCP config: ${res.status}`);
+  return res.json();
+}
+
 export function McpSessionToggle({ workspaceId, executor }: McpSessionToggleProps) {
   const [open, setOpen] = useState(false);
   const [servers, setServers] = useState<ServerEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [userRawJson, setUserRawJson] = useState<string>('{}');
+  const [userServers, setUserServers] = useState<Record<string, unknown>>({});
   const [projectServers, setProjectServers] = useState<Record<string, unknown>>({});
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const machineClient = useSettingsMachineClient();
-  const { profiles } = useUserSystem();
 
   // Close on outside click
   useEffect(() => {
@@ -50,35 +68,32 @@ export function McpSessionToggle({ workspaceId, executor }: McpSessionToggleProp
   }, [open]);
 
   const load = useCallback(async () => {
-    if (!machineClient || !executor) return;
+    if (!executor) return;
     setLoading(true);
     try {
-      // User-level MCP from ~/.claude.json
-      const profileKey = profiles ? Object.keys(profiles).find((k) => k === executor) : null;
-      const execKey = (profileKey ?? executor) as import('shared/types').BaseCodingAgent;
-      const userResult = await machineClient.loadMcpServers({ executor: execKey });
-      const fullConfig = McpConfigStrategyGeneral.createFullConfig(userResult.mcp_config);
-      const rawJson = JSON.stringify(fullConfig, null, 2);
-      setUserRawJson(rawJson);
+      // User-level MCP from ~/.claude.json via /api/mcp-config
+      const userResult = await loadUserMcpServers(executor);
+      const uServers = userResult?.servers ?? {};
+      setUserServers(uServers);
 
-      const userEntries: ServerEntry[] = Object.entries(
-        (userResult.mcp_config as { servers?: Record<string, unknown> }).servers ?? {}
-      ).map(([key, val]) => ({
-        key,
-        enabled: (val as Record<string, unknown>)?.enabled !== false,
-        source: 'user',
-      }));
-
-      // Project-level MCP from .mcp.json
-      const projectResult = await fetchProjectMcpServers(workspaceId);
-      setProjectServers(projectResult.servers);
-      const projectEntries: ServerEntry[] = Object.entries(projectResult.servers).map(
+      const userEntries: ServerEntry[] = Object.entries(uServers).map(
         ([key, val]) => ({
           key,
           enabled: (val as Record<string, unknown>)?.enabled !== false,
-          source: 'project',
+          source: 'user' as const,
         })
       );
+
+      // Project-level MCP from .mcp.json via /api/project-mcp-config
+      const projectResult = await fetchProjectMcpServers(workspaceId);
+      setProjectServers(projectResult.servers);
+      const projectEntries: ServerEntry[] = Object.entries(
+        projectResult.servers
+      ).map(([key, val]) => ({
+        key,
+        enabled: (val as Record<string, unknown>)?.enabled !== false,
+        source: 'project' as const,
+      }));
 
       setServers([...userEntries, ...projectEntries]);
     } catch (err) {
@@ -86,7 +101,7 @@ export function McpSessionToggle({ workspaceId, executor }: McpSessionToggleProp
     } finally {
       setLoading(false);
     }
-  }, [machineClient, executor, profiles, workspaceId]);
+  }, [executor, workspaceId]);
 
   useEffect(() => {
     if (open) load();
@@ -98,37 +113,25 @@ export function McpSessionToggle({ workspaceId, executor }: McpSessionToggleProp
 
       // Optimistic update
       setServers((prev) =>
-        prev.map((s) => (s.key === entry.key && s.source === entry.source ? { ...s, enabled: newEnabled } : s))
+        prev.map((s) =>
+          s.key === entry.key && s.source === entry.source
+            ? { ...s, enabled: newEnabled }
+            : s
+        )
       );
 
       try {
         if (entry.source === 'user') {
-          // Write enabled flag into user-level config JSON
-          const parsed = JSON.parse(userRawJson);
-          const root = parsed.mcpServers ?? parsed;
-          if (root[entry.key] && typeof root[entry.key] === 'object') {
-            root[entry.key].enabled = newEnabled;
+          const updated = { ...userServers };
+          if (updated[entry.key] && typeof updated[entry.key] === 'object') {
+            (updated[entry.key] as Record<string, unknown>).enabled =
+              newEnabled;
           }
-          const updated = JSON.stringify(parsed, null, 2);
-          setUserRawJson(updated);
-
-          if (machineClient && executor) {
-            const profileKey = profiles ? Object.keys(profiles).find((k) => k === executor) : null;
-            const execKey = (profileKey ?? executor) as import('shared/types').BaseCodingAgent;
-            const userResult = await machineClient.loadMcpServers({ executor: execKey });
-            const fullCfg = McpConfigStrategyGeneral.createFullConfig(userResult.mcp_config);
-            const rootCfg = (fullCfg.mcpServers ?? fullCfg) as Record<string, unknown>;
-            if (rootCfg[entry.key] && typeof rootCfg[entry.key] === 'object') {
-              (rootCfg[entry.key] as Record<string, unknown>).enabled = newEnabled;
-            }
-            const apiServers = McpConfigStrategyGeneral.extractServersForApi(
-              userResult.mcp_config,
-              fullCfg
-            );
-            await machineClient.saveMcpServers({ executor: execKey }, { servers: apiServers });
+          setUserServers(updated);
+          if (executor) {
+            await saveUserMcpServers(executor, updated);
           }
         } else {
-          // Write enabled flag into project-level config
           const updated = {
             ...projectServers,
             [entry.key]: {
@@ -143,11 +146,15 @@ export function McpSessionToggle({ workspaceId, executor }: McpSessionToggleProp
         console.error('[McpSessionToggle] toggle error:', err);
         // Revert optimistic update
         setServers((prev) =>
-          prev.map((s) => (s.key === entry.key && s.source === entry.source ? { ...s, enabled: !newEnabled } : s))
+          prev.map((s) =>
+            s.key === entry.key && s.source === entry.source
+              ? { ...s, enabled: !newEnabled }
+              : s
+          )
         );
       }
     },
-    [userRawJson, projectServers, machineClient, executor, profiles, workspaceId]
+    [userServers, projectServers, executor, workspaceId]
   );
 
   const enabledCount = servers.filter((s) => s.enabled).length;
@@ -164,9 +171,14 @@ export function McpSessionToggle({ workspaceId, executor }: McpSessionToggleProp
           open && 'text-normal'
         )}
       >
-        <PlugIcon weight={enabledCount > 0 ? 'fill' : 'regular'} className="size-4" />
+        <PlugIcon
+          weight={enabledCount > 0 ? 'fill' : 'regular'}
+          className="size-4"
+        />
         {enabledCount > 0 && (
-          <span className="ml-0.5 text-xs tabular-nums leading-none">{enabledCount}</span>
+          <span className="ml-0.5 text-xs tabular-nums leading-none">
+            {enabledCount}
+          </span>
         )}
       </button>
 
@@ -182,7 +194,9 @@ export function McpSessionToggle({ workspaceId, executor }: McpSessionToggleProp
           {loading ? (
             <div className="px-3 py-3 text-xs text-low">Loading…</div>
           ) : servers.length === 0 ? (
-            <div className="px-3 py-3 text-xs text-low">No MCP servers configured</div>
+            <div className="px-3 py-3 text-xs text-low">
+              No MCP servers configured
+            </div>
           ) : (
             <div className="max-h-72 overflow-y-auto divide-y divide-border/40">
               {servers.map((entry) => (
@@ -196,13 +210,21 @@ export function McpSessionToggle({ workspaceId, executor }: McpSessionToggleProp
                   )}
                 >
                   <span className="flex flex-col min-w-0">
-                    <span className="text-sm font-medium text-normal truncate">{entry.key}</span>
+                    <span className="text-sm font-medium text-normal truncate">
+                      {entry.key}
+                    </span>
                     <span className="text-xs text-low">{entry.source}</span>
                   </span>
                   {entry.enabled ? (
-                    <ToggleRight className="size-5 text-success shrink-0" weight="fill" />
+                    <ToggleRight
+                      className="size-5 text-success shrink-0"
+                      weight="fill"
+                    />
                   ) : (
-                    <ToggleLeft className="size-5 text-low shrink-0" weight="fill" />
+                    <ToggleLeft
+                      className="size-5 text-low shrink-0"
+                      weight="fill"
+                    />
                   )}
                 </button>
               ))}
