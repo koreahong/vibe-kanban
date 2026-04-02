@@ -20,17 +20,24 @@ interface McpSessionToggleProps {
   executor: BaseCodingAgent | null | undefined;
 }
 
-// Load user-level MCP servers via direct API call
-async function loadUserMcpServers(executor: string) {
+// Load user-level MCP servers via /api/mcp-config
+// Response: { success, data: { mcp_config: { servers: {...} }, config_path } }
+async function loadUserMcpServers(
+  executor: string
+): Promise<Record<string, unknown>> {
   const res = await makeLocalApiRequest(
     `/api/mcp-config?executor=${encodeURIComponent(executor)}`
   );
   if (!res.ok) throw new Error(`Failed to load MCP config: ${res.status}`);
-  return res.json();
+  const json = await res.json();
+  return (json?.data?.mcp_config?.servers as Record<string, unknown>) ?? {};
 }
 
-// Save user-level MCP servers via direct API call
-async function saveUserMcpServers(executor: string, servers: Record<string, unknown>) {
+// Save user-level MCP servers via /api/mcp-config POST
+async function saveUserMcpServers(
+  executor: string,
+  servers: Record<string, unknown>
+) {
   const res = await makeLocalApiRequest(
     `/api/mcp-config?executor=${encodeURIComponent(executor)}`,
     {
@@ -40,15 +47,19 @@ async function saveUserMcpServers(executor: string, servers: Record<string, unkn
     }
   );
   if (!res.ok) throw new Error(`Failed to save MCP config: ${res.status}`);
-  return res.json();
 }
 
-export function McpSessionToggle({ workspaceId, executor }: McpSessionToggleProps) {
+export function McpSessionToggle({
+  workspaceId,
+  executor,
+}: McpSessionToggleProps) {
   const [open, setOpen] = useState(false);
   const [servers, setServers] = useState<ServerEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [userServers, setUserServers] = useState<Record<string, unknown>>({});
-  const [projectServers, setProjectServers] = useState<Record<string, unknown>>({});
+  const [projectServers, setProjectServers] = useState<
+    Record<string, unknown>
+  >({});
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -71,11 +82,9 @@ export function McpSessionToggle({ workspaceId, executor }: McpSessionToggleProp
     if (!executor) return;
     setLoading(true);
     try {
-      // User-level MCP from ~/.claude.json via /api/mcp-config
-      const userResult = await loadUserMcpServers(executor);
-      const uServers = userResult?.servers ?? {};
+      // User-level MCP from ~/.claude.json
+      const uServers = await loadUserMcpServers(executor);
       setUserServers(uServers);
-
       const userEntries: ServerEntry[] = Object.entries(uServers).map(
         ([key, val]) => ({
           key,
@@ -84,7 +93,7 @@ export function McpSessionToggle({ workspaceId, executor }: McpSessionToggleProp
         })
       );
 
-      // Project-level MCP from .mcp.json via /api/project-mcp-config
+      // Project-level MCP from .mcp.json
       const projectResult = await fetchProjectMcpServers(workspaceId);
       setProjectServers(projectResult.servers);
       const projectEntries: ServerEntry[] = Object.entries(
@@ -144,7 +153,6 @@ export function McpSessionToggle({ workspaceId, executor }: McpSessionToggleProp
         }
       } catch (err) {
         console.error('[McpSessionToggle] toggle error:', err);
-        // Revert optimistic update
         setServers((prev) =>
           prev.map((s) =>
             s.key === entry.key && s.source === entry.source
