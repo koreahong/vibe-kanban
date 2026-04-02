@@ -1,6 +1,6 @@
 #!/bin/bash
 # QRAFT-CUSTOM: Self-hosted build wrapper with verification gates
-# Usage: ./deploy-build.sh --desktop  (or --remote, same flags as local-build.sh)
+# Usage: ./deploy-build.sh --desktop
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -13,17 +13,17 @@ export VK_SHARED_API_BASE="http://10.8.97.88:3000"
 export VITE_VK_SHARED_API_BASE="http://10.8.97.88:3000"
 export VK_SHARED_RELAY_API_BASE="http://10.8.97.88:8082"
 
-# Extract all option_env!() vars used in crates and verify they're all exported
+# Check required self-hosted env vars (optional analytics vars like POSTHOG/SENTRY are skipped)
+REQUIRED_VARS=("VK_SHARED_API_BASE" "VK_SHARED_RELAY_API_BASE")
 MISSING=0
-while IFS= read -r var; do
+for var in "${REQUIRED_VARS[@]}"; do
     if [[ -z "${!var:-}" ]]; then
-        echo "  ❌ MISSING: $var (used in crates via option_env! but not exported)"
+        echo "  ❌ MISSING: $var"
         MISSING=1
     else
         echo "  ✅ $var = ${!var}"
     fi
-done < <(grep -r 'option_env!("' "$SCRIPT_DIR/crates/" 2>/dev/null \
-         | grep -oP '(?<=option_env!\(")[^"]+' | sort -u)
+done
 
 if [[ $MISSING -eq 1 ]]; then
     echo "❌ [Gate 1] FAILED — add missing vars above before building"
@@ -33,7 +33,25 @@ echo "✅ [Gate 1] All env vars present"
 
 # ── Build ────────────────────────────────────────────────────────────────────
 echo "🏠 QRAFT self-hosted build: VK_SHARED_API_BASE=${VK_SHARED_API_BASE}"
-"$SCRIPT_DIR/local-build.sh" "$@"
+
+echo "🔨 Building web app..."
+# SENTRY_UPLOAD=false disables sentry-vite-plugin source map upload for local builds
+(cd "$SCRIPT_DIR/packages/local-web" && SENTRY_UPLOAD=false npm run build)
+
+echo "🖥️  Building Tauri desktop app (.app only)..."
+# Fix updater endpoint placeholder for local builds
+TAURI_CONF="$SCRIPT_DIR/crates/tauri-app/tauri.conf.json"
+node -e "
+  const fs = require('fs');
+  const conf = JSON.parse(fs.readFileSync('$TAURI_CONF', 'utf8'));
+  // Disable updater plugin entirely for local builds (no signing key available)
+  delete conf.plugins.updater;
+  if (conf.bundle) conf.bundle.createUpdaterArtifacts = false;
+  fs.writeFileSync('$TAURI_CONF', JSON.stringify(conf, null, 2) + '\n');
+"
+# --bundles app: build .app only, skip bundle_dmg.sh (DMG created manually via hdiutil in Gate 2)
+(cd "$SCRIPT_DIR" && cargo tauri build --bundles app)
+git -C "$SCRIPT_DIR" checkout -- "$TAURI_CONF"
 
 # ── GATE 2: Post-build binary verification (desktop only) ───────────────────
 if [[ "$*" == *"--desktop"* ]]; then
