@@ -7,7 +7,10 @@ import { PlugIcon, ToggleLeft, ToggleRight } from '@phosphor-icons/react';
 import type { BaseCodingAgent } from 'shared/types';
 import { cn } from '@/shared/lib/utils';
 import { makeLocalApiRequest } from '@/shared/lib/localApiTransport';
-import { fetchProjectMcpServers, updateProjectMcpServers } from '@/shared/lib/projectMcpApi';
+import {
+  fetchProjectMcpServers,
+  updateProjectMcpServers,
+} from '@/shared/lib/projectMcpApi';
 
 interface ServerEntry {
   key: string;
@@ -22,11 +25,13 @@ interface McpSessionToggleProps {
 
 // Load user-level MCP servers via /api/mcp-config
 // Response: { success, data: { mcp_config: { servers: {...} }, config_path } }
+// workspace_id enables disabledMcpServers cross-reference on the backend
 async function loadUserMcpServers(
-  executor: string
+  executor: string,
+  workspaceId: string
 ): Promise<Record<string, unknown>> {
   const res = await makeLocalApiRequest(
-    `/api/mcp-config?executor=${encodeURIComponent(executor)}`
+    `/api/mcp-config?executor=${encodeURIComponent(executor)}&workspace_id=${encodeURIComponent(workspaceId)}`
   );
   if (!res.ok) throw new Error(`Failed to load MCP config: ${res.status}`);
   const json = await res.json();
@@ -34,12 +39,14 @@ async function loadUserMcpServers(
 }
 
 // Save user-level MCP servers via /api/mcp-config POST
+// workspace_id enables disabledMcpServers sync on the backend
 async function saveUserMcpServers(
   executor: string,
-  servers: Record<string, unknown>
+  servers: Record<string, unknown>,
+  workspaceId: string
 ) {
   const res = await makeLocalApiRequest(
-    `/api/mcp-config?executor=${encodeURIComponent(executor)}`,
+    `/api/mcp-config?executor=${encodeURIComponent(executor)}&workspace_id=${encodeURIComponent(workspaceId)}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -57,9 +64,9 @@ export function McpSessionToggle({
   const [servers, setServers] = useState<ServerEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [userServers, setUserServers] = useState<Record<string, unknown>>({});
-  const [projectServers, setProjectServers] = useState<
-    Record<string, unknown>
-  >({});
+  const [projectServers, setProjectServers] = useState<Record<string, unknown>>(
+    {}
+  );
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -82,8 +89,8 @@ export function McpSessionToggle({
     if (!executor) return;
     setLoading(true);
     try {
-      // User-level MCP from ~/.claude.json
-      const uServers = await loadUserMcpServers(executor);
+      // User-level MCP from ~/.claude.json (backend cross-refs disabledMcpServers)
+      const uServers = await loadUserMcpServers(executor, workspaceId);
       setUserServers(uServers);
       const userEntries: ServerEntry[] = Object.entries(uServers).map(
         ([key, val]) => ({
@@ -138,7 +145,7 @@ export function McpSessionToggle({
           }
           setUserServers(updated);
           if (executor) {
-            await saveUserMcpServers(executor, updated);
+            await saveUserMcpServers(executor, updated, workspaceId);
           }
         } else {
           const updated = {

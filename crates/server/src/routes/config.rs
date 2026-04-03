@@ -9,6 +9,8 @@ use axum::{
     response::{IntoResponse, Json as ResponseJson, Response},
     routing::{get, put},
 };
+use db::models::workspace::Workspace;
+use db::models::workspace_repo::WorkspaceRepo;
 use deployment::{Deployment, DeploymentError};
 use executors::{
     executors::{
@@ -274,6 +276,8 @@ async fn get_sound(Path(sound): Path<SoundFile>) -> Result<Response, ApiError> {
 #[derive(TS, Debug, Deserialize)]
 pub struct McpServerQuery {
     executor: BaseCodingAgent,
+    // QRAFT-CUSTOM: workspace context for disabledMcpServers lookup
+    workspace_id: Option<Uuid>,
 }
 
 #[derive(TS, Debug, Serialize, Deserialize)]
@@ -289,7 +293,7 @@ pub struct UpdateMcpServersBody {
 }
 
 async fn get_mcp_servers(
-    State(_deployment): State<DeploymentImpl>,
+    State(deployment): State<DeploymentImpl>,
     Query(query): Query<McpServerQuery>,
 ) -> Result<ResponseJson<ApiResponse<GetMcpServerResponse>>, ApiError> {
     let coding_agent = ExecutorConfigs::get_cached()
@@ -316,7 +320,18 @@ async fn get_mcp_servers(
 
     let mut mcpc = coding_agent.get_mcp_config();
     let raw_config = read_agent_config(&config_path, &mcpc).await?;
-    let servers = get_mcp_servers_from_config_path(&raw_config, &mcpc.servers_path);
+    let mut servers = get_mcp_servers_from_config_path(&raw_config, &mcpc.servers_path);
+
+    // QRAFT-CUSTOM: cross-reference disabledMcpServers from projects.<path> in ~/.claude.json
+    if let Some(ws_id) = query.workspace_id {
+        let pool = &deployment.db().pool;
+        if let Ok(Some(workspace)) = Workspace::find_by_id(pool, ws_id).await {
+            let container_ref = workspace.container_ref.unwrap_or_default();
+            let project_dir = resolve_project_dir(pool, ws_id, &container_ref).await;
+            apply_disabled_mcp_servers(&raw_config, &project_dir, &mut servers);
+        }
+    }
+
     mcpc.set_servers(servers);
     Ok(ResponseJson(ApiResponse::success(GetMcpServerResponse {
         mcp_config: mcpc,
@@ -325,7 +340,7 @@ async fn get_mcp_servers(
 }
 
 async fn update_mcp_servers(
-    State(_deployment): State<DeploymentImpl>,
+    State(deployment): State<DeploymentImpl>,
     Query(query): Query<McpServerQuery>,
     Json(payload): Json<UpdateMcpServersBody>,
 ) -> Result<ResponseJson<ApiResponse<String>>, ApiError> {
@@ -352,8 +367,21 @@ async fn update_mcp_servers(
         }
     };
 
+    // QRAFT-CUSTOM: resolve project dir for disabledMcpServers sync
+    let project_dir = if let Some(ws_id) = query.workspace_id {
+        let pool = &deployment.db().pool;
+        if let Ok(Some(workspace)) = Workspace::find_by_id(pool, ws_id).await {
+            let container_ref = workspace.container_ref.unwrap_or_default();
+            Some(resolve_project_dir(pool, ws_id, &container_ref).await)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let mcpc = agent.get_mcp_config();
-    match update_mcp_servers_in_config(&config_path, &mcpc, payload.servers).await {
+    match update_mcp_servers_in_config(&config_path, &mcpc, payload.servers, project_dir).await {
         Ok(message) => Ok(ResponseJson(ApiResponse::success(message))),
         Err(e) => Ok(ResponseJson(ApiResponse::error(&format!(
             "Failed to update MCP servers: {}",
@@ -366,6 +394,8 @@ async fn update_mcp_servers_in_config(
     config_path: &std::path::Path,
     mcpc: &McpConfig,
     new_servers: HashMap<String, Value>,
+    // QRAFT-CUSTOM: project dir for disabledMcpServers sync
+    project_dir: Option<String>,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     // Ensure parent directory exists
     if let Some(parent) = config_path.parent() {
@@ -379,6 +409,30 @@ async fn update_mcp_servers_in_config(
 
     // Set the MCP servers using the correct attribute path
     set_mcp_servers_in_config_path(&mut config, &mcpc.servers_path, &new_servers)?;
+
+    // QRAFT-CUSTOM: sync disabledMcpServers in projects.<project_dir>
+    if let Some(project_dir) = project_dir {
+        let mut disabled: Vec<&str> = new_servers
+            .iter()
+            .filter(|(_, v)| v.get("enabled").and_then(|e| e.as_bool()) == Some(false))
+            .map(|(k, _)| k.as_str())
+            .collect();
+        disabled.sort();
+        let disabled_value = serde_json::to_value(&disabled)?;
+        let projects = config
+            .as_object_mut()
+            .ok_or("config is not an object")?
+            .entry("projects")
+            .or_insert_with(|| serde_json::json!({}));
+        let proj = projects
+            .as_object_mut()
+            .ok_or("projects is not an object")?
+            .entry(project_dir)
+            .or_insert_with(|| serde_json::json!({}));
+        proj.as_object_mut()
+            .ok_or("project entry is not an object")?
+            .insert("disabledMcpServers".to_string(), disabled_value);
+    }
 
     // Write the updated config back to file (JSON or TOML depending on agent)
     write_agent_config(config_path, mcpc, &config).await?;
@@ -450,6 +504,44 @@ fn set_mcp_servers_in_config_path(
         .insert(final_attr.to_string(), serde_json::to_value(servers)?);
 
     Ok(())
+}
+
+// QRAFT-CUSTOM: resolve the project directory path that Claude Code CLI uses for this workspace
+async fn resolve_project_dir(pool: &sqlx::SqlitePool, ws_id: Uuid, container_ref: &str) -> String {
+    let base_dir = std::path::PathBuf::from(container_ref);
+    match WorkspaceRepo::find_repos_for_workspace(pool, ws_id).await {
+        Ok(repos) if repos.len() == 1 => {
+            let repo_dir = base_dir.join(&repos[0].name);
+            if repo_dir.exists() {
+                return repo_dir.to_string_lossy().to_string();
+            }
+            base_dir.to_string_lossy().to_string()
+        }
+        _ => base_dir.to_string_lossy().to_string(),
+    }
+}
+
+// QRAFT-CUSTOM: mark servers as disabled if they appear in projects.<dir>.disabledMcpServers
+fn apply_disabled_mcp_servers(
+    raw_config: &Value,
+    project_dir: &str,
+    servers: &mut HashMap<String, Value>,
+) {
+    let disabled: Vec<&str> = raw_config
+        .get("projects")
+        .and_then(|p| p.get(project_dir))
+        .and_then(|proj| proj.get("disabledMcpServers"))
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+
+    for name in disabled {
+        if let Some(server) = servers.get_mut(name) {
+            if let Some(obj) = server.as_object_mut() {
+                obj.insert("enabled".to_string(), Value::Bool(false));
+            }
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
