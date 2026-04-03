@@ -3,6 +3,7 @@ import { base64ToBytes } from "@remote/shared/lib/relay/bytes";
 import { getActiveRelayHostId } from "@remote/shared/lib/relay/activeHostContext";
 import {
   shouldRelayApiPath,
+  stripHostApiPrefix,
   toPathAndQuery,
   resolveRelayHostIdForCurrentPage,
 } from "@remote/shared/lib/relay/routing";
@@ -47,14 +48,16 @@ export async function requestLocalApiViaWebRtc(
     return fetch(pathOrUrl, requestInit);
   }
 
+  const strippedPath = stripHostApiPrefix(pathAndQuery);
+
   const hostId = resolveHostId(requestInit);
   if (!hostId) {
-    return requestLocalApiViaRelay(pathOrUrl, requestInit);
+    return requestLocalApiViaRelay(strippedPath, requestInit);
   }
 
   const conn = getWebRtcConnection(hostId);
   if (!conn) {
-    return requestLocalApiViaRelay(pathOrUrl, requestInit);
+    return requestLocalApiViaRelay(strippedPath, requestInit);
   }
 
   const method = (requestInit.method ?? "GET").toUpperCase();
@@ -82,21 +85,21 @@ export async function requestLocalApiViaWebRtc(
     } else if (requestInit.body instanceof Blob) {
       bodyBytes = new Uint8Array(await requestInit.body.arrayBuffer());
     } else {
-      return requestLocalApiViaRelay(pathOrUrl, requestInit);
+      return requestLocalApiViaRelay(strippedPath, requestInit);
     }
   }
 
   try {
     const dcResp = await conn.sendHttpRequest(
       method,
-      pathAndQuery,
+      strippedPath,
       headers,
       bodyBytes,
     );
     return dataChannelResponseToResponse(dcResp);
   } catch (err) {
     console.warn("[webrtc] request failed, falling back to relay:", err);
-    return requestLocalApiViaRelay(pathOrUrl, requestInit);
+    return requestLocalApiViaRelay(strippedPath, requestInit);
   }
 }
 
@@ -110,17 +113,19 @@ export async function openLocalApiWebSocketViaWebRtc(
     return new WebSocket(normalizeWebSocketUrl(pathOrUrl));
   }
 
+  const strippedPath = stripHostApiPrefix(pathAndQuery);
+
   const hostId = resolveHostId(options);
   if (!hostId) {
-    return openLocalApiWebSocketViaRelay(pathOrUrl, options);
+    return openLocalApiWebSocketViaRelay(strippedPath, options);
   }
 
   const conn = getWebRtcConnection(hostId);
   if (!conn) {
-    return openLocalApiWebSocketViaRelay(pathOrUrl, options);
+    return openLocalApiWebSocketViaRelay(strippedPath, options);
   }
 
-  return createDataChannelWebSocket(conn, pathAndQuery);
+  return createDataChannelWebSocket(conn, strippedPath);
 }
 
 function dataChannelResponseToResponse(dcResp: DataChannelResponse): Response {

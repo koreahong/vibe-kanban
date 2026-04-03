@@ -64,6 +64,21 @@ export function toPathAndQuery(pathOrUrl: string): string {
   return pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
 }
 
+/**
+ * Strip the /api/host/{hostId}/... prefix added by scopeLocalApiPath().
+ * In remote-web, the transport layer (WebRTC/relay) already routes to the
+ * correct host, so this prefix must be removed before reaching the local server.
+ * Otherwise, the local server's /api/host/{host_id}/{*tail} route matches and
+ * tries to relay-proxy to "itself", which always fails.
+ */
+export function stripHostApiPrefix(pathAndQuery: string): string {
+  const match = pathAndQuery.match(/^\/api\/host\/[^/?]+(\/[^?]*)?(\?.*)?$/);
+  if (!match) return pathAndQuery;
+  const tail = match[1] || "";
+  const query = match[2] || "";
+  return `/api${tail}${query}`;
+}
+
 export function openBrowserWebSocket(pathOrUrl: string): WebSocket {
   if (/^wss?:\/\//i.test(pathOrUrl)) {
     return new WebSocket(pathOrUrl);

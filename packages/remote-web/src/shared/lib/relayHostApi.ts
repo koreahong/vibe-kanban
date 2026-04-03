@@ -14,6 +14,7 @@ import {
   openBrowserWebSocket,
   resolveRelayHostIdForCurrentPage,
   shouldRelayApiPath,
+  stripHostApiPrefix,
   toPathAndQuery,
 } from "@remote/shared/lib/relay/routing";
 import {
@@ -91,7 +92,7 @@ export async function requestRelayHostApi(
   requestInit: RequestInit = {},
 ): Promise<Response> {
   const pathAndQuery = toPathAndQuery(pathOrUrl);
-  const normalizedPath = normalizePath(pathAndQuery);
+  const normalizedPath = normalizePath(stripHostApiPrefix(pathAndQuery));
   const method = (requestInit.method ?? "GET").toUpperCase();
 
   const { body, bodyBytes, contentType } = await normalizeRequestBody(
@@ -140,7 +141,7 @@ export async function openRelayHostWebSocket(
   const context =
     (await tryRefreshRelayHostSigningSession(baseContext)) ?? baseContext;
   const pathAndQuery = toPathAndQuery(pathOrUrl);
-  const normalizedPath = normalizePath(pathAndQuery);
+  const normalizedPath = normalizePath(stripHostApiPrefix(pathAndQuery));
 
   const signature = await buildRelaySignature(
     context.pairedHost,
